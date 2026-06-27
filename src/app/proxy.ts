@@ -28,7 +28,7 @@ export default async function proxy(req: NextRequest) {
   }
 
   if (isPublicRoute && session?.userId) {
-    const target = session.role === "supplier" ? "/supplier" : "/dashboard"
+    const target = session.role === "supplier" ? "/supplier" : "/"
     return NextResponse.redirect(new URL(target, req.nextUrl))
   }
 

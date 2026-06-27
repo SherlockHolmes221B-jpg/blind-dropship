@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("admin")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplier   Supplier?
+  orders     Order[]     @relation("AssignedSupplier")
+  activities Activity[]
+}
+
+model Product {
+  id            Int      @id @default(autoincrement())
+  name          String
+  description   String   @default("")
+  sku           String   @unique
+  price         Float
+  cost          Float    @default(0)
+  ebayItemId    String   @default("")
+  ebayListingId String   @default("")
+  image         String   @default("")
+  category      String   @default("")
+  quantity      Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  productSuppliers ProductSupplier[]
+  orders           Order[]
+}
+
+model Supplier {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @unique
+  name        String
+  contactName String   @default("")
+  email       String   @default("")
+  phone       String   @default("")
+  address     String   @default("")
+  leadTime    Int      @default(3)
+  blindShip   Boolean  @default(true)
+  notes       String   @default("")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user            User              @relation(fields: [userId], references: [id])
+  productSuppliers ProductSupplier[]
+  orders          Order[]
+}
+
+model ProductSupplier {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  supplierId    Int
+  supplierPrice Float
+  leadTime      Int      @default(3)
+  isPreferred   Boolean  @default(false)
+
+  product  Product  @relation(fields: [productId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  @@unique([productId, supplierId])
+}
+
+model Order {
+  id              Int       @id @default(autoincrement())
+  orderNumber     String    @unique
+  ebayOrderId     String    @default("")
+  customerId      Int
+  productId       Int
+  supplierId      Int?
+  assignedToId    Int?
+  status          String    @default("pending")
+  quantity        Int       @default(1)
+  totalPrice      Float
+  cost            Float     @default(0)
+  shippingCost    Float     @default(0)
+  tax             Float     @default(0)
+  fee             Float     @default(0)
+  profit          Float     @default(0)
+  trackingNumber  String    @default("")
+  shippingCarrier String    @default("")
+  notes           String    @default("")
+  orderedAt       DateTime  @default(now())
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  product      Product       @relation(fields: [productId], references: [id])
+  supplier     Supplier?     @relation(fields: [supplierId], references: [id])
+  assignedTo   User?         @relation("AssignedSupplier", fields: [assignedToId], references: [id])
+  transactions Transaction[]
+}
+
+model Customer {
+  id             Int      @id @default(autoincrement())
+  name           String
+  email          String   @default("")
+  phone          String   @default("")
+  address        String   @default("")
+  ebayCustomerId String   @default("")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  orders Order[]
+}
+
+model Transaction {
+  id                  Int      @id @default(autoincrement())
+  transactionId       String   @unique
+  paypalTransactionId String   @default("")
+  orderId             Int?
+  type                String
+  amount              Float
+  fee                 Float    @default(0)
+  netAmount           Float
+  currency            String   @default("USD")
+  status              String   @default("completed")
+  paypalPayerId       String   @default("")
+  paypalEmail         String   @default("")
+  createdAt           DateTime @default(now())
+
+  order Order? @relation(fields: [orderId], references: [id])
+}
+
+model Activity {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  details   String   @default("")
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}

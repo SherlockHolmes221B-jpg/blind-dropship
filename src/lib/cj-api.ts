@@ -480,4 +480,20 @@ export async function getCJCategories(): Promise<string[]> {
   return Array.from(categories.values())
 }
 
+export async function lookupCJVariantId(pid: string): Promise<string | null> {
+  const token = await getAccessToken()
+  const url = `${CJ_API_BASE}/product/list?page=1&pageSize=1&pid=${encodeURIComponent(pid)}`
+
+  const res = await rateLimitedCjFetch(url, {
+    headers: { "CJ-Access-Token": token },
+  })
+
+  if (!res.ok) return null
+
+  const json: CJResponse = await res.json()
+  if (!json.success || !json.data?.list?.length) return null
+
+  return json.data.list[0].productSku || null
+}
+
 export type { CJProduct }

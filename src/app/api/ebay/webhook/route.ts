@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { submitCJOrder } from "@/lib/cj-api"
+import { submitCJOrder, lookupCJVariantId } from "@/lib/cj-api"
 
 interface ZapierPayload {
   ebayOrderId: string
@@ -80,12 +80,22 @@ export async function POST(req: Request) {
 
     // Auto-fulfill via CJ if product has CJ IDs
     let cjResult: { orderId?: string; trackingNumber?: string } | null = null
-    if (product.sku && product.cjVariantId) {
-      const addrParts = (customer.address || "").split(", ")
+    let variantId = product.cjVariantId
+    if (product.sku && !variantId) {
+      const lookedUp = await lookupCJVariantId(product.sku)
+      if (lookedUp) {
+        variantId = lookedUp
+        await prisma.product.update({
+          where: { id: product.id },
+          data: { cjVariantId: lookedUp },
+        })
+      }
+    }
+    if (product.sku && variantId) {
       try {
         cjResult = await submitCJOrder({
           productId: product.sku,
-          variantId: product.cjVariantId,
+          variantId,
           quantity: body.quantity || 1,
           shippingAddress: {
             name: customer.name,

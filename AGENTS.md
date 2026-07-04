@@ -41,10 +41,64 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - CJ_API_KEY
 
 ## What's PENDING for next session
-1. **eBay Developer account** — still pending approval (24h). Once approved, get App ID, Cert ID, Dev ID and add to Vercel env vars. Then remove the `EBAY_` placeholder code and connect for real.
-2. **Vercel PostgreSQL** — switch from Neon's direct connect to Vercel's Storage integration (optional, works fine as-is)
-3. **Spocket** — user decided not to use it. Sticking with CJ Dropshipping only.
+1. **Set up Zapier Free tier** — see "Zapier Automation" section below
+2. **Add ZAPIER_WEBHOOK_SECRET to Vercel env** — generate a random string
+3. **Vercel PostgreSQL** — switch from Neon's direct connect to Vercel's Storage integration (optional, works fine as-is)
 4. **Production hardening** — proper SESSION_SECRET, rate limiting, error monitoring
+
+## Zapier Automation (eBay → App → CJ Fulfillment)
+Since eBay declined the Developer account, automation goes through Zapier.
+
+### How it works
+1. Zapier watches your eBay seller account for new paid orders
+2. When an order comes in, Zapier POSTs the customer/shipping data to:
+   `https://blind-dropship.vercel.app/api/ebay/webhook`
+3. The webhook finds your product by `ebayItemId` (the Listing ID you entered)
+4. Creates the customer & order in the database
+5. Auto-submits the order to CJ Dropshipping for fulfillment
+6. CJ ships directly to your customer
+
+### Prerequisites
+- You must enter the eBay Item ID in each product's edit form (the "Listing ID" field)
+- The product must have been imported from CJ (so `sku` and `cjVariantId` are set)
+- Add a `ZAPIER_WEBHOOK_SECRET` in Vercel env (Settings → Environment Variables)
+
+### Zapier Free Tier Setup (100 tasks/month, 2 Zaps)
+
+Step 1 — Generate a secret:
+```
+openssl rand -hex 32
+```
+Or use any random string. Add it as `ZAPIER_WEBHOOK_SECRET` in Vercel env.
+
+Step 2 — Create the Zap:
+1. Go to https://zapier.com/app/editor
+2. Trigger: **eBay** → **New Order** (connects to your seller account)
+3. Action: **Webhooks by Zapier** → **POST**
+4. URL: `https://blind-dropship.vercel.app/api/ebay/webhook`
+5. Headers: `Authorization: <your-secret>`
+6. Payload Type: JSON
+7. Map these fields from eBay:
+   - `ebayOrderId` → Order ID (from eBay)
+   - `ebayItemId` → Item ID (from eBay, matches what you put in the product's Listing ID field)
+   - `customerName` → Buyer Name
+   - `customerEmail` → Buyer Email
+   - `customerPhone` → Buyer Phone
+   - `shippingAddress` → Street Address
+   - `shippingCity` → City
+   - `shippingState` → State
+   - `shippingZip` → Zip Code
+   - `shippingCountry` → Country Code (e.g., US)
+   - `quantity` → Quantity Purchased
+   - `totalPrice` → Order Total
+8. Test the Zap
+9. Turn it on
+
+### Free Tier Limitations
+- 100 orders/month (about 3/day)
+- 15-minute polling delay (not instant)
+- 2 Zaps max
+- Upgrade to paid ($20-30/mo) for instant triggers and more tasks
 
 ## Key Architecture
 - Prisma v7 with postgresql provider, PrismaPg adapter

@@ -8,6 +8,7 @@ export async function importCJProduct(formData: FormData) {
   await verifySession()
 
   const pid = formData.get("pid") as string
+  const variantId = formData.get("variantId") as string
   const name = formData.get("name") as string
   const price = parseFloat(formData.get("price") as string)
   const cost = parseFloat(formData.get("cost") as string)
@@ -28,6 +29,7 @@ export async function importCJProduct(formData: FormData) {
     data: {
       name,
       sku: pid,
+      cjVariantId: variantId,
       price,
       cost: isNaN(cost) ? 0 : cost,
       image,
@@ -43,6 +45,7 @@ export async function importCJProduct(formData: FormData) {
 
 export async function syncCJProducts(products: {
   pid: string
+  variantId: string
   name: string
   price: number
   cost: number
@@ -66,6 +69,7 @@ export async function syncCJProducts(products: {
       data: {
         name: p.name,
         sku: p.pid,
+        cjVariantId: p.variantId,
         price: p.price,
         cost: p.cost,
         image: p.image,

@@ -31,6 +31,7 @@ model Product {
   cost          Float    @default(0)
   ebayItemId    String   @default("")
   ebayListingId String   @default("")
+  cjVariantId   String   @default("")
   image         String   @default("")
   category      String   @default("")
   quantity      Int      @default(0)

@@ -17,6 +17,7 @@ interface CJProduct {
   image: string
   images: string[]
   weight: number
+  variantId: string
 }
 
 const RECOMMENDED_CATEGORIES = [
@@ -98,6 +99,7 @@ export function CJProductImport() {
 
     const formData = new FormData()
     formData.set("pid", product.pid)
+    formData.set("variantId", product.variantId)
     formData.set("name", product.englishName || product.name)
     formData.set("price", (product.sellPrice * 2.5).toString())
     formData.set("cost", product.sellPrice.toString())
@@ -229,6 +231,7 @@ export function CJProductImport() {
               try {
                 const toImport = products.map((p) => ({
                   pid: p.pid,
+                  variantId: p.variantId,
                   name: p.englishName || p.name,
                   price: p.sellPrice * 2.5,
                   cost: p.sellPrice,

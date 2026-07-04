@@ -64,7 +64,7 @@ export default async function ExceptionsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Products Not on eBay
+              Unlisted Products
               <Badge variant="warning">{unlisted.length}</Badge>
             </CardTitle>
           </CardHeader>

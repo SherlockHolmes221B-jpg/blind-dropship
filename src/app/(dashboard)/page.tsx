@@ -52,7 +52,7 @@ export default async function DashboardPage() {
               {totalProducts} products
             </p>
             <p className="text-xs text-zinc-500 mt-1">
-              {listedOnEbay} on eBay · {totalProducts - listedOnEbay} need listing
+              {listedOnEbay} Listed · {totalProducts - listedOnEbay} Unlisted
             </p>
           </CardContent>
         </Card>
@@ -124,7 +124,7 @@ export default async function DashboardPage() {
         <Card className="border-yellow-200 dark:border-yellow-900">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
-              📦 {totalProducts - listedOnEbay} product{(totalProducts - listedOnEbay) !== 1 ? "s" : ""} not listed on eBay yet
+              📦 {totalProducts - listedOnEbay} product{(totalProducts - listedOnEbay) !== 1 ? "s" : ""} not listed yet
             </CardTitle>
           </CardHeader>
           <CardContent>

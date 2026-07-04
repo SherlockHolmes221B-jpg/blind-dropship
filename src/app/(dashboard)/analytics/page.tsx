@@ -20,7 +20,7 @@ export default async function AnalyticsPage() {
       take: 10,
     }),
     prisma.$queryRawUnsafe<Array<{ month: string; revenue: number; profit: number }>>(
-      `SELECT strftime('%Y-%m', orderedAt) as month, SUM(totalPrice) as revenue, SUM(profit) as profit FROM "Order" GROUP BY month ORDER BY month DESC LIMIT 12`
+      `SELECT to_char("orderedAt", 'YYYY-MM') as month, SUM("totalPrice") as revenue, SUM("profit") as profit FROM "Order" GROUP BY month ORDER BY month DESC LIMIT 12`
     ),
   ])
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -19,6 +19,19 @@ interface CJProduct {
   weight: number
 }
 
+const RECOMMENDED_CATEGORIES = [
+  { keyword: "phone case", label: "Phone Cases", emoji: "📱", desc: "High demand, easy to ship" },
+  { keyword: "car accessories", label: "Car Accessories", emoji: "🚗", desc: "Popular with men, good margins" },
+  { keyword: "kitchen gadget", label: "Kitchen Gadgets", emoji: "🍳", desc: "Viral potential, impulse buy" },
+  { keyword: "pet supplies", label: "Pet Supplies", emoji: "🐾", desc: "Loyal buyers, repeat purchases" },
+  { keyword: "beauty tool", label: "Beauty Tools", emoji: "💄", desc: "Trend-driven, high volume" },
+  { keyword: "home office", label: "Home Office", emoji: "🏠", desc: "Remote work boom, steady sales" },
+  { keyword: "fitness", label: "Fitness & Gym", emoji: "💪", desc: "Year-round demand" },
+  { keyword: "storage organizer", label: "Storage & Organizer", emoji: "📦", desc: "Practical, universal appeal" },
+  { keyword: "jewelry", label: "Jewelry", emoji: "💍", desc: "High perceived value" },
+  { keyword: "baby", label: "Baby & Kids", emoji: "👶", desc: "New parents buy constantly" },
+]
+
 export function CJProductImport() {
   const [products, setProducts] = useState<CJProduct[]>([])
   const [loading, setLoading] = useState(false)
@@ -26,14 +39,17 @@ export function CJProductImport() {
   const [error, setError] = useState("")
   const [importing, setImporting] = useState<Set<string>>(new Set())
   const [message, setMessage] = useState("")
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [hasLoaded, setHasLoaded] = useState(false)
 
-  async function fetchProducts() {
+  const fetchProducts = useCallback(async (searchTerm?: string, category?: string) => {
     setLoading(true)
     setError("")
     setMessage("")
     try {
       const params = new URLSearchParams({ pageSize: "50" })
-      if (search.trim()) params.set("searchName", search.trim())
+      if (searchTerm) params.set("searchName", searchTerm)
+      if (category) params.set("categoryName", category)
 
       const res = await fetch(`/api/cj/products?${params.toString()}`)
       if (!res.ok) {
@@ -50,6 +66,26 @@ export function CJProductImport() {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!hasLoaded) {
+      setHasLoaded(true)
+      fetchProducts("phone case")
+      setActiveCategory("phone case")
+    }
+  }, [hasLoaded, fetchProducts])
+
+  function handleSearch() {
+    if (!search.trim()) return
+    setActiveCategory(null)
+    fetchProducts(search.trim())
+  }
+
+  function handleCategoryClick(keyword: string) {
+    setSearch(keyword)
+    setActiveCategory(keyword)
+    fetchProducts(keyword)
   }
 
   async function handleImport(product: CJProduct) {
@@ -79,45 +115,53 @@ export function CJProductImport() {
     })
   }
 
-  async function handleImportAll() {
-    setLoading(true)
-    setError("")
-    setMessage("")
-
-    try {
-      const toImport = products.map((p) => ({
-        pid: p.pid,
-        name: p.englishName || p.name,
-        price: p.sellPrice * 2.5,
-        cost: p.sellPrice,
-        image: p.image,
-        category: p.categoryName || "",
-        quantity: p.stock,
-      }))
-
-      const result = await syncCJProducts(toImport)
-      setMessage(`Imported ${result.imported} products. Skipped ${result.skipped} existing.`)
-      setProducts([])
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Import failed")
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="pt-6">
+          <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            🔥 Recommended Products to Sell
+          </h2>
+          <p className="mb-4 text-sm text-zinc-500">
+            Proven winning categories. Click any to browse products — import directly to your store.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {RECOMMENDED_CATEGORIES.map((cat) => (
+              <button
+                key={cat.keyword}
+                onClick={() => handleCategoryClick(cat.keyword)}
+                className={`rounded-xl border p-4 text-left transition-all hover:shadow-md ${
+                  activeCategory === cat.keyword
+                    ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950"
+                    : "border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+                }`}
+              >
+                <div className="text-2xl mb-1">{cat.emoji}</div>
+                <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{cat.label}</div>
+                <div className="mt-1 text-xs text-zinc-500">{cat.desc}</div>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex gap-3">
-        <Input
-          placeholder="Search CJ products..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && fetchProducts()}
-          className="max-w-md"
-        />
-        <Button onClick={fetchProducts} disabled={loading}>
-          {loading ? "Searching..." : "Search CJ Catalog"}
+        <div className="relative flex-1 max-w-md">
+          <Input
+            placeholder="Search CJ catalog (e.g. car accessories)..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+          />
+        </div>
+        <Button onClick={handleSearch} disabled={loading || !search.trim()}>
+          {loading ? "Searching..." : "Search"}
         </Button>
+        {products.length > 0 && (
+          <Button variant="secondary" onClick={() => { setProducts([]); setActiveCategory(null); setSearch("") }}>
+            Clear
+          </Button>
+        )}
       </div>
 
       {error && (
@@ -132,11 +176,44 @@ export function CJProductImport() {
         </div>
       )}
 
-      {products.length > 0 && (
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-sm text-zinc-500">Loading products...</div>
+        </div>
+      )}
+
+      {products.length > 0 && !loading && (
         <>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-zinc-500">{products.length} products found</p>
-            <Button variant="secondary" onClick={handleImportAll} disabled={loading}>
+            <p className="text-sm text-zinc-500">
+              {products.length} products found
+              {activeCategory && (
+                <span className="ml-1 text-zinc-400">
+                  for "<span className="font-medium text-zinc-600 dark:text-zinc-300">{activeCategory}</span>"
+                </span>
+              )}
+            </p>
+            <Button variant="secondary" size="sm" onClick={async () => {
+              setLoading(true)
+              try {
+                const toImport = products.map((p) => ({
+                  pid: p.pid,
+                  name: p.englishName || p.name,
+                  price: p.sellPrice * 2.5,
+                  cost: p.sellPrice,
+                  image: p.image,
+                  category: p.categoryName || "",
+                  quantity: p.stock,
+                }))
+                const result = await syncCJProducts(toImport)
+                setMessage(`Imported ${result.imported} products. Skipped ${result.skipped} existing.`)
+                if (result.imported > 0) setProducts([])
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Import failed")
+              } finally {
+                setLoading(false)
+              }
+            }} disabled={loading}>
               Import All to Store
             </Button>
           </div>
@@ -188,9 +265,9 @@ export function CJProductImport() {
 
       {!loading && products.length === 0 && !message && (
         <div className="rounded-xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
-          <p className="text-zinc-500">Search for CJ products above to get started</p>
+          <p className="text-zinc-500">Choose a category above or search for products</p>
           <p className="mt-1 text-xs text-zinc-400">
-            Try: phone case, kitchen gadget, pet bowl, desk organizer
+            Try: phone case, car accessories, kitchen gadget, pet bowl
           </p>
         </div>
       )}

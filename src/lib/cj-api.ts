@@ -44,8 +44,20 @@ interface CJResponse {
 
 let cachedToken: { token: string; expiresAt: Date } | null = null
 
-// In-memory category cache: categoryId -> categoryName
 let categoryCache: Map<string, string> | null = null
+
+let lastCjRequestTime = 0
+const CJ_RATE_LIMIT_MS = 1200
+
+async function rateLimitedCjFetch(url: string, options?: RequestInit): Promise<Response> {
+  const now = Date.now()
+  const elapsed = now - lastCjRequestTime
+  if (elapsed < CJ_RATE_LIMIT_MS) {
+    await new Promise((r) => setTimeout(r, CJ_RATE_LIMIT_MS - elapsed))
+  }
+  lastCjRequestTime = Date.now()
+  return fetch(url, options)
+}
 
 async function getAccessToken(): Promise<string> {
   if (cachedToken && cachedToken.expiresAt > new Date()) {
@@ -55,7 +67,7 @@ async function getAccessToken(): Promise<string> {
   const apiKey = process.env.CJ_API_KEY
   if (!apiKey) throw new Error("CJ_API_KEY not configured")
 
-  const res = await fetch(`${CJ_API_BASE}/authentication/getAccessToken`, {
+  const res = await rateLimitedCjFetch(`${CJ_API_BASE}/authentication/getAccessToken`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ apiKey }),
@@ -105,7 +117,7 @@ async function fetchCJPage(page: number, pageSize: number): Promise<{ products: 
   const token = await getAccessToken()
   const url = `${CJ_API_BASE}/product/list?page=${page}&pageSize=${pageSize}`
 
-  const res = await fetch(url, {
+  const res = await rateLimitedCjFetch(url, {
     headers: { "CJ-Access-Token": token },
   })
 
@@ -125,6 +137,25 @@ async function fetchCJPage(page: number, pageSize: number): Promise<{ products: 
   }
 }
 
+async function fetchCJPageWithCategory(categoryId: string, pageSize: number): Promise<{ products: CJProduct[] }> {
+  const token = await getAccessToken()
+  const url = `${CJ_API_BASE}/product/list?page=1&pageSize=${pageSize}&categoryId=${encodeURIComponent(categoryId)}`
+
+  const res = await rateLimitedCjFetch(url, {
+    headers: { "CJ-Access-Token": token },
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`CJ category fetch failed: ${res.status} ${text}`)
+  }
+
+  const json: CJResponse = await res.json()
+  if (!json.success) throw new Error(`CJ category fetch error: ${json.code}`)
+
+  return { products: (json.data.list || []).map(mapProduct) }
+}
+
 async function buildCategoryCache(): Promise<Map<string, string>> {
   if (categoryCache && categoryCache.size > 0) return categoryCache
 
@@ -140,6 +171,12 @@ async function buildCategoryCache(): Promise<Map<string, string>> {
   return categoryCache
 }
 
+function matchesKeyword(catName: string, keyword: string): boolean {
+  const name = catName.toLowerCase()
+  const words = keyword.toLowerCase().split(/\s+/).filter(Boolean)
+  return words.some((word) => name.includes(word))
+}
+
 export async function fetchCJProducts(params: {
   page?: number
   pageSize?: number
@@ -149,24 +186,21 @@ export async function fetchCJProducts(params: {
   const pageSize = Math.min(params.pageSize || 200, 200)
   const keyword = params.searchName?.trim().toLowerCase()
 
-  // If searching by keyword, find matching categories first, then fetch by categoryId
   if (keyword) {
     const categories = await buildCategoryCache()
     const matchingIds: string[] = []
 
     for (const [id, name] of categories) {
-      if (name.toLowerCase().includes(keyword)) {
+      if (matchesKeyword(name, keyword)) {
         matchingIds.push(id)
       }
     }
 
     if (matchingIds.length > 0) {
-      // Fetch products from up to 5 matching categories
       const allProducts: CJProduct[] = []
       const seenPids = new Set<string>()
 
       for (let i = 0; i < Math.min(matchingIds.length, 5); i++) {
-        await new Promise((r) => setTimeout(r, 1100))
         try {
           const { products } = await fetchCJPageWithCategory(matchingIds[i], pageSize)
           for (const p of products) {
@@ -185,7 +219,6 @@ export async function fetchCJProducts(params: {
       }
     }
 
-    // Fallback: fetch latest products and filter locally
     const { products } = await fetchCJPage(params.page || 1, pageSize)
     const filtered = products.filter((p) =>
       p.englishName.toLowerCase().includes(keyword) ||
@@ -200,7 +233,7 @@ export async function fetchCJProducts(params: {
     const categories = await buildCategoryCache()
     const cat = params.categoryName.trim().toLowerCase()
     for (const [id, name] of categories) {
-      if (name.toLowerCase() === cat || name.toLowerCase().includes(cat)) {
+      if (name.toLowerCase() === cat || matchesKeyword(name, cat)) {
         const { products } = await fetchCJPageWithCategory(id, pageSize)
         return { products, total: products.length }
       }
@@ -211,25 +244,6 @@ export async function fetchCJProducts(params: {
   return { products, total: products.length }
 }
 
-async function fetchCJPageWithCategory(categoryId: string, pageSize: number): Promise<{ products: CJProduct[] }> {
-  const token = await getAccessToken()
-  const url = `${CJ_API_BASE}/product/list?page=1&pageSize=${pageSize}&categoryId=${encodeURIComponent(categoryId)}`
-
-  const res = await fetch(url, {
-    headers: { "CJ-Access-Token": token },
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`CJ category fetch failed: ${res.status} ${text}`)
-  }
-
-  const json: CJResponse = await res.json()
-  if (!json.success) throw new Error(`CJ category fetch error: ${json.code}`)
-
-  return { products: (json.data.list || []).map(mapProduct) }
-}
-
 export async function submitCJOrder(params: {
   productId: string
   variantId: string
@@ -238,7 +252,7 @@ export async function submitCJOrder(params: {
 }) {
   const token = await getAccessToken()
 
-  const res = await fetch(`${CJ_API_BASE}/order/create`, {
+  const res = await rateLimitedCjFetch(`${CJ_API_BASE}/order/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "CJ-Access-Token": token },
     body: JSON.stringify({

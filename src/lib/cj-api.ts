@@ -77,21 +77,10 @@ function parsePrice(price: string): number {
   return match ? parseFloat(match[0]) : 0
 }
 
-export async function fetchCJProducts(params: {
-  page?: number
-  pageSize?: number
-  categoryName?: string
-  searchName?: string
-} = {}): Promise<{ products: CJProduct[]; total: number }> {
+async function fetchCJPage(page: number, pageSize: number): Promise<{ products: CJProduct[]; total: number }> {
   const token = await getAccessToken()
 
-  const searchParams = new URLSearchParams()
-  if (params.page) searchParams.set("page", params.page.toString())
-  if (params.pageSize) searchParams.set("pageSize", params.pageSize.toString())
-  if (params.categoryName) searchParams.set("categoryName", params.categoryName)
-  if (params.searchName) searchParams.set("searchName", params.searchName)
-
-  const url = `${CJ_API_BASE}/product/list?${searchParams.toString()}`
+  const url = `${CJ_API_BASE}/product/list?page=${page}&pageSize=${pageSize}`
 
   const res = await fetch(url, {
     headers: { "CJ-Access-Token": token },
@@ -122,10 +111,72 @@ export async function fetchCJProducts(params: {
     description: item.remark || "",
   }))
 
-  return {
-    products,
-    total: json.data.total,
+  return { products, total: json.data.total }
+}
+
+function matchesKeyword(product: CJProduct, keyword: string): boolean {
+  const kw = keyword.toLowerCase()
+  return (
+    product.englishName.toLowerCase().includes(kw) ||
+    product.name.toLowerCase().includes(kw) ||
+    product.categoryName.toLowerCase().includes(kw)
+  )
+}
+
+export async function fetchCJProducts(params: {
+  page?: number
+  pageSize?: number
+  categoryName?: string
+  searchName?: string
+} = {}): Promise<{ products: CJProduct[]; total: number }> {
+  const pageSize = Math.min(params.pageSize || 200, 200)
+
+  const result = await fetchCJPage(params.page || 1, pageSize)
+  let products = result.products
+  let total = result.total
+
+  const keyword = params.searchName?.trim().toLowerCase()
+  const category = params.categoryName?.trim().toLowerCase()
+
+  if (keyword || category) {
+    const initialMatchCount = products.filter((p) => {
+      if (keyword && !matchesKeyword(p, keyword)) return false
+      if (category && !p.categoryName.toLowerCase().includes(category)) return false
+      return true
+    }).length
+
+    if (initialMatchCount < 20) {
+      const seenPids = new Set(products.map((p) => p.pid))
+      for (let pg = 2; pg <= 5; pg++) {
+        await new Promise((r) => setTimeout(r, 1100))
+        try {
+          const nextPage = await fetchCJPage(pg, pageSize)
+          for (const p of nextPage.products) {
+            if (!seenPids.has(p.pid)) {
+              seenPids.add(p.pid)
+              products.push(p)
+            }
+          }
+        } catch {
+          break
+        }
+        const matchCount = products.filter((p) => {
+          if (keyword && !matchesKeyword(p, keyword)) return false
+          if (category && !p.categoryName.toLowerCase().includes(category)) return false
+          return true
+        }).length
+        if (matchCount >= 40) break
+      }
+    }
+
+    products = products.filter((p) => {
+      if (keyword && !matchesKeyword(p, keyword)) return false
+      if (category && !p.categoryName.toLowerCase().includes(category)) return false
+      return true
+    })
   }
+
+  return { products, total }
 }
 
 export async function submitCJOrder(params: {

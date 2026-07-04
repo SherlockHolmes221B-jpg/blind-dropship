@@ -41,15 +41,18 @@ export function CJProductImport() {
   const [message, setMessage] = useState("")
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [hasLoaded, setHasLoaded] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
 
-  const fetchProducts = useCallback(async (searchTerm?: string, category?: string) => {
+  const uniqueCategories = [...new Set(products.map((p) => p.categoryName).filter(Boolean))]
+
+  const fetchProducts = useCallback(async (searchTerm?: string) => {
     setLoading(true)
     setError("")
     setMessage("")
+    setCategoryFilter(null)
     try {
-      const params = new URLSearchParams({ pageSize: "50" })
+      const params = new URLSearchParams({ pageSize: "200" })
       if (searchTerm) params.set("searchName", searchTerm)
-      if (category) params.set("categoryName", category)
 
       const res = await fetch(`/api/cj/products?${params.toString()}`)
       if (!res.ok) {
@@ -184,9 +187,37 @@ export function CJProductImport() {
 
       {products.length > 0 && !loading && (
         <>
+          {uniqueCategories.length > 1 && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setCategoryFilter(null)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  !categoryFilter
+                    ? "bg-blue-600 text-white"
+                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                }`}
+              >
+                All
+              </button>
+              {uniqueCategories.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    categoryFilter === cat
+                      ? "bg-blue-600 text-white"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <p className="text-sm text-zinc-500">
-              {products.length} products found
+              {(categoryFilter ? products.filter((p) => p.categoryName === categoryFilter).length : products.length)} products found
               {activeCategory && (
                 <span className="ml-1 text-zinc-400">
                   for "<span className="font-medium text-zinc-600 dark:text-zinc-300">{activeCategory}</span>"
@@ -219,7 +250,7 @@ export function CJProductImport() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {products.map((product) => (
+            {(categoryFilter ? products.filter((p) => p.categoryName === categoryFilter) : products).map((product) => (
               <Card key={product.pid} className="overflow-hidden">
                 <div className="aspect-square bg-zinc-100 dark:bg-zinc-800">
                   {product.image ? (

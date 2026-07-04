@@ -17,10 +17,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Exceptions page (products not on eBay, low margins, unassigned orders)
 - Team page (multi-user admin management)
 - Full CRUD for Products, Suppliers, Orders
-- CJ Dropshipping API integration (import products)
+- CJ Dropshipping API V2 integration (keyword search, real stock, all categories)
+- Zapier webhook for automated eBay order fulfillment
 - Analytics page (revenue, profit, margins)
 - Supplier portal (limited view for suppliers)
-- eBay API client (ready for keys)
 - PayPal webhook stub
 
 ## Accounts Created
@@ -41,10 +41,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - CJ_API_KEY
 
 ## What's PENDING for next session
-1. **Set up Zapier Free tier** — see "Zapier Automation" section below
-2. **Add ZAPIER_WEBHOOK_SECRET to Vercel env** — generate a random string
-3. **Vercel PostgreSQL** — switch from Neon's direct connect to Vercel's Storage integration (optional, works fine as-is)
-4. **Production hardening** — proper SESSION_SECRET, rate limiting, error monitoring
+1. **Vercel PostgreSQL** — switch from Neon's direct connect to Vercel's Storage integration (optional, works fine as-is)
+2. **Production hardening** — proper SESSION_SECRET, rate limiting, error monitoring
 
 ## Zapier Automation (eBay → App → CJ Fulfillment)
 Since eBay declined the Developer account, automation goes through Zapier.

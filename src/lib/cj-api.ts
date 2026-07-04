@@ -29,17 +29,84 @@ interface CJRawProduct {
   categoryId: string
   productWeight: string
   remark: string
+  warehouseInventoryNum?: string | number
+}
+
+interface CJV2Product {
+  id: string
+  nameEn: string
+  bigImage: string
+  sku: string
+  spu: string
+  sellPrice: string
+  nowPrice: string
+  listedNum: number
+  categoryId: string
+  threeCategoryName: string
+  warehouseInventoryNum: number
+  totalVerifiedInventory: number
+  totalUnVerifiedInventory: number
+  addMarkStatus: number
+  isVideo: number
+  productType: string
+  supplierName: string
+  createAt: number
+  deliveryCycle: string
+  description?: string
+}
+
+interface CJV2ContentItem {
+  productList: CJV2Product[]
+  relatedCategoryList: { categoryId: string; categoryName: string }[]
+  keyWord: string
+  keyWordOld: string
+}
+
+interface CJV2Response {
+  code: number
+  result: boolean
+  message: string
+  data: {
+    pageSize: number
+    pageNumber: number
+    totalRecords: number
+    totalPages: number
+    content: CJV2ContentItem[]
+  }
+  requestId: string
+  success: boolean
 }
 
 interface CJResponse {
   code: number
-  success: boolean
+  result: boolean
+  message: string
   data: {
     list: CJRawProduct[]
     total: number
-    page: number
-    pageSize: number
+    pageNum?: number
+    pageSize?: number
   }
+  requestId: string
+  success: boolean
+}
+
+interface CJCategory {
+  categoryId: string
+  categoryName: string
+  categoryFirstName?: string
+  categoryFirstList?: CJCategory[]
+  categorySecondName?: string
+  categorySecondList?: CJCategory[]
+}
+
+interface CJCategoryResponse {
+  code: number
+  result: boolean
+  message: string
+  data: CJCategory[]
+  requestId: string
+  success: boolean
 }
 
 let cachedToken: { token: string; expiresAt: Date } | null = null
@@ -94,26 +161,132 @@ function parsePrice(price: string): number {
   return match ? parseFloat(match[0]) : 0
 }
 
-function mapProduct(item: CJRawProduct): CJProduct {
+async function fetchAllCategories(): Promise<Map<string, string>> {
+  const token = await getAccessToken()
+
+  const res = await rateLimitedCjFetch(`${CJ_API_BASE}/product/getCategory`, {
+    headers: { "CJ-Access-Token": token },
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`CJ category list failed: ${res.status} ${text}`)
+  }
+
+  const json: CJCategoryResponse = await res.json()
+  if (!json.success) throw new Error(`CJ category list error: ${json.code}`)
+
+  const map = new Map<string, string>()
+
+  function walk(list: CJCategory[]) {
+    for (const item of list) {
+      if (item.categoryId && item.categoryName) {
+        map.set(item.categoryId, item.categoryName)
+      }
+      if (item.categorySecondList) walk(item.categorySecondList)
+      if (item.categoryFirstList) walk(item.categoryFirstList)
+    }
+  }
+
+  walk(json.data || [])
+  return map
+}
+
+async function buildCategoryCache(): Promise<Map<string, string>> {
+  if (categoryCache && categoryCache.size > 0) return categoryCache
+
+  try {
+    categoryCache = await fetchAllCategories()
+    if (categoryCache.size > 0) return categoryCache
+  } catch {
+    // fallback to legacy page-1 extraction
+  }
+
+  categoryCache = new Map()
+  try {
+    const { raw } = await legacyFetchPage(1, 200)
+    for (const item of raw) {
+      if (item.categoryId && item.categoryName && !categoryCache.has(item.categoryId)) {
+        categoryCache.set(item.categoryId, item.categoryName)
+      }
+    }
+  } catch {
+    // empty is ok
+  }
+
+  return categoryCache
+}
+
+async function fetchV2Products(params: {
+  keyword?: string
+  categoryId?: string
+  page?: number
+  size?: number
+  minStock?: number
+  productFlag?: number
+  orderBy?: number
+  features?: string[]
+}): Promise<{ products: CJProduct[]; total: number }> {
+  const token = await getAccessToken()
+  const size = Math.min(params.size || 100, 100)
+  const page = params.page || 1
+
+  const searchParams = new URLSearchParams()
+  searchParams.set("page", page.toString())
+  searchParams.set("size", size.toString())
+  if (params.keyword) searchParams.set("keyWord", params.keyword)
+  if (params.categoryId) searchParams.set("categoryId", params.categoryId)
+  if (params.minStock !== undefined) searchParams.set("startWarehouseInventory", params.minStock.toString())
+  if (params.productFlag !== undefined) searchParams.set("productFlag", params.productFlag.toString())
+  if (params.orderBy !== undefined) searchParams.set("orderBy", params.orderBy.toString())
+  if (params.features?.length) searchParams.set("features", params.features.join(","))
+
+  const url = `${CJ_API_BASE}/product/listV2?${searchParams.toString()}`
+
+  const res = await rateLimitedCjFetch(url, {
+    headers: { "CJ-Access-Token": token },
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`CJ V2 product list failed: ${res.status} ${text}`)
+  }
+
+  const json: CJV2Response = await res.json()
+  if (!json.success) throw new Error(`CJ V2 product list error: ${json.code}`)
+
+  const rawProducts: CJV2Product[] = []
+  for (const content of json.data?.content || []) {
+    for (const p of content.productList || []) {
+      rawProducts.push(p)
+    }
+  }
+
+  const products: CJProduct[] = rawProducts.map(mapV2Product)
+
+  return { products, total: json.data?.totalRecords || products.length }
+}
+
+function mapV2Product(item: CJV2Product): CJProduct {
   return {
-    pid: item.pid,
-    name: item.productName || "",
-    englishName: item.productNameEn || "",
-    image: item.productImage || "",
-    images: item.productImage ? [item.productImage] : [],
-    variantId: item.productSku || "",
+    pid: item.id,
+    name: item.nameEn || "",
+    englishName: item.nameEn || "",
+    image: item.bigImage || "",
+    images: item.bigImage ? [item.bigImage] : [],
+    variantId: item.sku || item.spu || "",
     sellPrice: parsePrice(item.sellPrice || "0"),
-    stock: parseInt(item.listingCount) || 0,
-    categoryName: item.categoryName || "",
-    weight: parseFloat(item.productWeight) || 0,
+    stock: item.warehouseInventoryNum ?? item.totalVerifiedInventory ?? 0,
+    categoryName: item.threeCategoryName || "",
+    weight: 0,
     length: 0,
     width: 0,
     height: 0,
-    description: item.remark || "",
+    description: item.description || "",
   }
 }
 
-async function fetchCJPage(page: number, pageSize: number): Promise<{ products: CJProduct[]; total: number; raw: CJRawProduct[] }> {
+async function legacyFetchPage(page: number, pageSize: number): Promise<{ products: CJProduct[]; total: number; raw: CJRawProduct[] }> {
   const token = await getAccessToken()
   const url = `${CJ_API_BASE}/product/list?page=${page}&pageSize=${pageSize}`
 
@@ -129,15 +302,131 @@ async function fetchCJPage(page: number, pageSize: number): Promise<{ products: 
   const json: CJResponse = await res.json()
   if (!json.success) throw new Error(`CJ product list error: ${json.code}`)
 
-  const raw = json.data.list || []
+  const raw = json.data?.list || []
   return {
-    products: raw.map(mapProduct),
-    total: json.data.total,
+    products: raw.map(mapLegacyProduct),
+    total: json.data?.total || 0,
     raw,
   }
 }
 
-async function fetchCJPageWithCategory(categoryId: string, pageSize: number): Promise<{ products: CJProduct[] }> {
+function mapLegacyProduct(item: CJRawProduct): CJProduct {
+  return {
+    pid: item.pid,
+    name: item.productName || "",
+    englishName: item.productNameEn || "",
+    image: item.productImage || "",
+    images: item.productImage ? [item.productImage] : [],
+    variantId: item.productSku || "",
+    sellPrice: parsePrice(item.sellPrice || "0"),
+    stock: parseInt(item.warehouseInventoryNum as string) || 0,
+    categoryName: item.categoryName || "",
+    weight: parseFloat(item.productWeight) || 0,
+    length: 0,
+    width: 0,
+    height: 0,
+    description: item.remark || "",
+  }
+}
+
+export async function fetchCJProducts(params: {
+  page?: number
+  pageSize?: number
+  categoryName?: string
+  searchName?: string
+} = {}): Promise<{ products: CJProduct[]; total: number }> {
+  const keyword = params.searchName?.trim()
+
+  // Use V2 for keyword search (properly supports keyword search + returns stock)
+  if (keyword) {
+    try {
+      const result = await fetchV2Products({
+        keyword,
+        size: Math.min(params.pageSize || 100, 100),
+        minStock: 1,
+      })
+      if (result.products.length > 0) return result
+    } catch {
+      // fallback below
+    }
+
+    // If V2 fails or returns nothing, try V1 with productNameEn
+    try {
+      const token = await getAccessToken()
+      const url = `${CJ_API_BASE}/product/list?page=${params.page || 1}&pageSize=${Math.min(params.pageSize || 200, 200)}&productNameEn=${encodeURIComponent(keyword)}`
+      const res = await rateLimitedCjFetch(url, {
+        headers: { "CJ-Access-Token": token },
+      })
+      if (res.ok) {
+        const json: CJResponse = await res.json()
+        if (json.success) {
+          const raw = json.data?.list || []
+          if (raw.length > 0) {
+            return {
+              products: raw.map(mapLegacyProduct),
+              total: raw.length,
+            }
+          }
+        }
+      }
+    } catch {
+      // final fallback below
+    }
+
+    // Final fallback: fetch all and filter locally
+    const { products } = await legacyFetchPage(params.page || 1, 200)
+    const kw = keyword.toLowerCase()
+    const filtered = products.filter((p) =>
+      p.englishName.toLowerCase().includes(kw) ||
+      p.name.toLowerCase().includes(kw) ||
+      p.categoryName.toLowerCase().includes(kw)
+    )
+    return { products: filtered, total: filtered.length }
+  }
+
+  // If a category name is specified, find its ID from cache and fetch via V2
+  if (params.categoryName) {
+    const categories = await buildCategoryCache()
+    const cat = params.categoryName.trim().toLowerCase()
+    for (const [id, name] of categories) {
+      if (name.toLowerCase() === cat || name.toLowerCase().includes(cat)) {
+        try {
+          const result = await fetchV2Products({
+            categoryId: id,
+            size: Math.min(params.pageSize || 100, 100),
+            minStock: 1,
+          })
+          if (result.products.length > 0) return result
+        } catch {
+          // fallback to V1 category fetch
+        }
+        try {
+          const { products } = await legacyFetchCategoryPage(id, Math.min(params.pageSize || 200, 200))
+          return { products, total: products.length }
+        } catch {
+          continue
+        }
+      }
+    }
+  }
+
+  // Default: show trending products via V2
+  try {
+    const result = await fetchV2Products({
+      size: Math.min(params.pageSize || 100, 100),
+      minStock: 1,
+      orderBy: 3,
+    })
+    if (result.products.length > 0) return result
+  } catch {
+    // fallback
+  }
+
+  const { products } = await legacyFetchPage(params.page || 1, 200)
+  return { products, total: products.length }
+}
+
+async function legacyFetchCategoryPage(categoryId: string, pageSize: number): Promise<{ products: CJProduct[] }> {
   const token = await getAccessToken()
   const url = `${CJ_API_BASE}/product/list?page=1&pageSize=${pageSize}&categoryId=${encodeURIComponent(categoryId)}`
 
@@ -153,151 +442,7 @@ async function fetchCJPageWithCategory(categoryId: string, pageSize: number): Pr
   const json: CJResponse = await res.json()
   if (!json.success) throw new Error(`CJ category fetch error: ${json.code}`)
 
-  return { products: (json.data.list || []).map(mapProduct) }
-}
-
-async function fetchPageAndExtractCategories(page: number): Promise<number> {
-  const { raw } = await fetchCJPage(page, 200)
-  let added = 0
-  for (const item of raw) {
-    if (item.categoryId && item.categoryName && !categoryCache!.has(item.categoryId)) {
-      categoryCache!.set(item.categoryId, item.categoryName)
-      added++
-    }
-  }
-  return added
-}
-
-async function buildCategoryCache(): Promise<Map<string, string>> {
-  if (categoryCache && categoryCache.size > 0) return categoryCache
-
-  categoryCache = new Map()
-
-  // Fetch pages 1-3 to discover more categories (rate-limited to 1.2s apart)
-  for (let page = 1; page <= 3; page++) {
-    try {
-      const added = await fetchPageAndExtractCategories(page)
-      if (added === 0) break // no new categories, stop expanding
-    } catch {
-      break
-    }
-  }
-
-  return categoryCache
-}
-
-async function expandCategoryCache(): Promise<number> {
-  if (!categoryCache) return 0
-  let totalAdded = 0
-  for (let page = 4; page <= 10; page++) {
-    try {
-      const added = await fetchPageAndExtractCategories(page)
-      totalAdded += added
-      if (added === 0) break
-    } catch {
-      break
-    }
-  }
-  return totalAdded
-}
-
-function matchesKeyword(catName: string, keyword: string): boolean {
-  const name = catName.toLowerCase()
-  const words = keyword.toLowerCase().split(/\s+/).filter(Boolean)
-  return words.some((word) => name.includes(word))
-}
-
-export async function fetchCJProducts(params: {
-  page?: number
-  pageSize?: number
-  categoryName?: string
-  searchName?: string
-} = {}): Promise<{ products: CJProduct[]; total: number }> {
-  const pageSize = Math.min(params.pageSize || 200, 200)
-  const keyword = params.searchName?.trim().toLowerCase()
-
-  if (keyword) {
-    const categories = await buildCategoryCache()
-    let matchingIds: string[] = []
-
-    for (const [id, name] of categories) {
-      if (matchesKeyword(name, keyword)) {
-        matchingIds.push(id)
-      }
-    }
-
-    let allProducts: CJProduct[] = []
-    const seenPids = new Set<string>()
-
-    if (matchingIds.length > 0) {
-      for (let i = 0; i < Math.min(matchingIds.length, 5); i++) {
-        try {
-          const { products } = await fetchCJPageWithCategory(matchingIds[i], pageSize)
-          for (const p of products) {
-            if (!seenPids.has(p.pid)) {
-              seenPids.add(p.pid)
-              allProducts.push(p)
-            }
-          }
-        } catch {
-          continue
-        }
-      }
-    }
-
-    // If no products found from category matching, expand cache and retry
-    if (allProducts.length === 0) {
-      matchingIds = []
-      const newCats = await expandCategoryCache()
-      if (newCats > 0) {
-        for (const [id, name] of categoryCache!) {
-          if (matchesKeyword(name, keyword)) {
-            matchingIds.push(id)
-          }
-        }
-        for (let i = 0; i < Math.min(matchingIds.length, 5); i++) {
-          try {
-            const { products } = await fetchCJPageWithCategory(matchingIds[i], pageSize)
-            for (const p of products) {
-              if (!seenPids.has(p.pid)) {
-                seenPids.add(p.pid)
-                allProducts.push(p)
-              }
-            }
-          } catch {
-            continue
-          }
-        }
-      }
-    }
-
-    if (allProducts.length > 0) {
-      return { products: allProducts, total: allProducts.length }
-    }
-
-    const { products } = await fetchCJPage(params.page || 1, pageSize)
-    const filtered = products.filter((p) =>
-      p.englishName.toLowerCase().includes(keyword) ||
-      p.name.toLowerCase().includes(keyword) ||
-      p.categoryName.toLowerCase().includes(keyword)
-    )
-
-    return { products: filtered, total: filtered.length }
-  }
-
-  if (params.categoryName) {
-    const categories = await buildCategoryCache()
-    const cat = params.categoryName.trim().toLowerCase()
-    for (const [id, name] of categories) {
-      if (name.toLowerCase() === cat || matchesKeyword(name, cat)) {
-        const { products } = await fetchCJPageWithCategory(id, pageSize)
-        return { products, total: products.length }
-      }
-    }
-  }
-
-  const { products } = await fetchCJPage(params.page || 1, pageSize)
-  return { products, total: products.length }
+  return { products: (json.data?.list || []).map(mapLegacyProduct) }
 }
 
 export async function submitCJOrder(params: {

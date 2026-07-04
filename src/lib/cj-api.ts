@@ -156,19 +156,49 @@ async function fetchCJPageWithCategory(categoryId: string, pageSize: number): Pr
   return { products: (json.data.list || []).map(mapProduct) }
 }
 
+async function fetchPageAndExtractCategories(page: number): Promise<number> {
+  const { raw } = await fetchCJPage(page, 200)
+  let added = 0
+  for (const item of raw) {
+    if (item.categoryId && item.categoryName && !categoryCache!.has(item.categoryId)) {
+      categoryCache!.set(item.categoryId, item.categoryName)
+      added++
+    }
+  }
+  return added
+}
+
 async function buildCategoryCache(): Promise<Map<string, string>> {
   if (categoryCache && categoryCache.size > 0) return categoryCache
 
-  const { raw } = await fetchCJPage(1, 200)
   categoryCache = new Map()
 
-  for (const item of raw) {
-    if (item.categoryId && item.categoryName && !categoryCache.has(item.categoryId)) {
-      categoryCache.set(item.categoryId, item.categoryName)
+  // Fetch pages 1-3 to discover more categories (rate-limited to 1.2s apart)
+  for (let page = 1; page <= 3; page++) {
+    try {
+      const added = await fetchPageAndExtractCategories(page)
+      if (added === 0) break // no new categories, stop expanding
+    } catch {
+      break
     }
   }
 
   return categoryCache
+}
+
+async function expandCategoryCache(): Promise<number> {
+  if (!categoryCache) return 0
+  let totalAdded = 0
+  for (let page = 4; page <= 10; page++) {
+    try {
+      const added = await fetchPageAndExtractCategories(page)
+      totalAdded += added
+      if (added === 0) break
+    } catch {
+      break
+    }
+  }
+  return totalAdded
 }
 
 function matchesKeyword(catName: string, keyword: string): boolean {
@@ -188,7 +218,7 @@ export async function fetchCJProducts(params: {
 
   if (keyword) {
     const categories = await buildCategoryCache()
-    const matchingIds: string[] = []
+    let matchingIds: string[] = []
 
     for (const [id, name] of categories) {
       if (matchesKeyword(name, keyword)) {
@@ -196,10 +226,10 @@ export async function fetchCJProducts(params: {
       }
     }
 
-    if (matchingIds.length > 0) {
-      const allProducts: CJProduct[] = []
-      const seenPids = new Set<string>()
+    let allProducts: CJProduct[] = []
+    const seenPids = new Set<string>()
 
+    if (matchingIds.length > 0) {
       for (let i = 0; i < Math.min(matchingIds.length, 5); i++) {
         try {
           const { products } = await fetchCJPageWithCategory(matchingIds[i], pageSize)
@@ -213,10 +243,36 @@ export async function fetchCJProducts(params: {
           continue
         }
       }
+    }
 
-      if (allProducts.length > 0) {
-        return { products: allProducts, total: allProducts.length }
+    // If no products found from category matching, expand cache and retry
+    if (allProducts.length === 0) {
+      matchingIds = []
+      const newCats = await expandCategoryCache()
+      if (newCats > 0) {
+        for (const [id, name] of categoryCache!) {
+          if (matchesKeyword(name, keyword)) {
+            matchingIds.push(id)
+          }
+        }
+        for (let i = 0; i < Math.min(matchingIds.length, 5); i++) {
+          try {
+            const { products } = await fetchCJPageWithCategory(matchingIds[i], pageSize)
+            for (const p of products) {
+              if (!seenPids.has(p.pid)) {
+                seenPids.add(p.pid)
+                allProducts.push(p)
+              }
+            }
+          } catch {
+            continue
+          }
+        }
       }
+    }
+
+    if (allProducts.length > 0) {
+      return { products: allProducts, total: allProducts.length }
     }
 
     const { products } = await fetchCJPage(params.page || 1, pageSize)

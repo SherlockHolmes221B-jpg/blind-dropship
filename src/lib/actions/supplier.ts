@@ -45,7 +45,7 @@ export async function createSupplier(prevState: unknown, formData: FormData) {
     include: { supplier: true },
   })
 
-  revalidatePath("/dashboard/suppliers")
+  revalidatePath("/suppliers")
   return { message: "Supplier created. Temporary password: " + password }
 }
 
@@ -72,12 +72,12 @@ export async function updateSupplier(id: number, prevState: unknown, formData: F
 
   const data = validatedFields.data
   await prisma.supplier.update({ where: { id }, data })
-  revalidatePath("/dashboard/suppliers")
-  redirect("/dashboard/suppliers")
+  revalidatePath("/suppliers")
+  redirect("/suppliers")
 }
 
 export async function deleteSupplier(id: number) {
   await verifySession()
   await prisma.supplier.update({ where: { id }, data: { isActive: false } })
-  revalidatePath("/dashboard/suppliers")
+  revalidatePath("/suppliers")
 }

@@ -37,7 +37,7 @@ export async function importCJProduct(formData: FormData) {
     },
   })
 
-  revalidatePath("/dashboard/cj-products")
+  revalidatePath("/cj-products")
   return { success: true }
 }
 
@@ -76,6 +76,6 @@ export async function syncCJProducts(products: {
     imported++
   }
 
-  revalidatePath("/dashboard/cj-products")
+  revalidatePath("/cj-products")
   return { imported, skipped }
 }

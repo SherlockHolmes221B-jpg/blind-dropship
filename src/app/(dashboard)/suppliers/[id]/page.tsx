@@ -44,10 +44,10 @@ export default function EditSupplierPage({ params }: { params: Promise<{ id: str
             {state?.message && <p className="text-sm text-red-500">{state.message}</p>}
             <div className="flex gap-3 pt-2">
               <Button type="submit" loading={pending}>Save Changes</Button>
-              <Button type="button" variant="secondary" onClick={() => router.push("/dashboard/suppliers")}>Cancel</Button>
+              <Button type="button" variant="secondary" onClick={() => router.push("/suppliers")}>Cancel</Button>
               <Button type="button" variant="danger" onClick={async () => {
                 await deleteSupplier(parseInt(id))
-                router.push("/dashboard/suppliers")
+                router.push("/suppliers")
               }}>Delete</Button>
             </div>
           </form>

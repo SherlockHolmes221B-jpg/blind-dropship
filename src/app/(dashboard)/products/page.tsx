@@ -20,7 +20,7 @@ export default async function ProductsPage() {
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Products</h1>
           <p className="text-sm text-zinc-500">Manage your product catalog</p>
         </div>
-        <Link href="/dashboard/products/new">
+        <Link href="/products/new">
           <Button>Add Product</Button>
         </Link>
       </div>
@@ -63,7 +63,7 @@ export default async function ProductsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Link
-                      href={`/dashboard/products/${product.id}`}
+                      href={`/products/${product.id}`}
                       className="text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
                     >
                       Edit

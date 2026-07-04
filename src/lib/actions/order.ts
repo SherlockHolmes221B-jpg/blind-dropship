@@ -27,7 +27,7 @@ export async function assignSupplier(orderId: number, supplierId: number) {
     },
   })
 
-  revalidatePath("/dashboard/orders")
+  revalidatePath("/orders")
 }
 
 export async function markShipped(orderId: number, trackingNumber: string, carrier: string) {
@@ -53,7 +53,7 @@ export async function markShipped(orderId: number, trackingNumber: string, carri
   })
 
   revalidatePath("/supplier")
-  revalidatePath("/dashboard/orders")
+  revalidatePath("/orders")
 }
 
 export async function markDelivered(orderId: number) {
@@ -73,7 +73,7 @@ export async function markDelivered(orderId: number) {
     data: { status: "delivered", deliveredAt: new Date(), profit },
   })
 
-  revalidatePath("/dashboard/orders")
+  revalidatePath("/orders")
 }
 
 export async function createManualOrder(prevState: unknown, formData: FormData) {
@@ -112,6 +112,6 @@ export async function createManualOrder(prevState: unknown, formData: FormData) 
     },
   })
 
-  revalidatePath("/dashboard/orders")
+  revalidatePath("/orders")
   return { message: "Order created.", orderNumber }
 }

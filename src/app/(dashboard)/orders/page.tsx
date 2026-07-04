@@ -29,7 +29,7 @@ export default async function OrdersPage({
         </div>
         <div className="flex gap-2">
           {["all", "pending", "processing", "shipped", "delivered"].map((s) => (
-            <Link key={s} href={s === "all" ? "/dashboard/orders" : `?status=${s}`}>
+            <Link key={s} href={s === "all" ? "/orders" : `?status=${s}`}>
               <Button variant={(!status && s === "all") || status === s ? "primary" : "secondary"} size="sm">
                 {s.charAt(0).toUpperCase() + s.slice(1)}
               </Button>
@@ -55,7 +55,7 @@ export default async function OrdersPage({
             {orders.map((order) => (
               <tr key={order.id} className="border-b border-zinc-100 dark:border-zinc-800">
                 <td className="px-4 py-3">
-                  <Link href={`/dashboard/orders/${order.id}`} className="font-medium hover:underline">
+                  <Link href={`/orders/${order.id}`} className="font-medium hover:underline">
                     {order.orderNumber}
                   </Link>
                 </td>

@@ -31,8 +31,8 @@ export async function createProduct(prevState: unknown, formData: FormData) {
   const data = validatedFields.data
 
   await prisma.product.create({ data })
-  revalidatePath("/dashboard/products")
-  redirect("/dashboard/products")
+  revalidatePath("/products")
+  redirect("/products")
 }
 
 export async function updateProduct(id: number, prevState: unknown, formData: FormData) {
@@ -60,12 +60,12 @@ export async function updateProduct(id: number, prevState: unknown, formData: Fo
   const data = validatedFields.data
 
   await prisma.product.update({ where: { id }, data })
-  revalidatePath("/dashboard/products")
-  redirect("/dashboard/products")
+  revalidatePath("/products")
+  redirect("/products")
 }
 
 export async function deleteProduct(id: number) {
   await verifySession()
   await prisma.product.update({ where: { id }, data: { isActive: false } })
-  revalidatePath("/dashboard/products")
+  revalidatePath("/products")
 }

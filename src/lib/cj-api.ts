@@ -239,7 +239,8 @@ async function fetchV2Products(params: {
   if (params.minStock !== undefined) searchParams.set("startWarehouseInventory", params.minStock.toString())
   if (params.productFlag !== undefined) searchParams.set("productFlag", params.productFlag.toString())
   if (params.orderBy !== undefined) searchParams.set("orderBy", params.orderBy.toString())
-  if (params.features?.length) searchParams.set("features", params.features.join(","))
+  const features = params.features?.length ? params.features : ["enable_category"]
+  searchParams.set("features", features.join(","))
 
   const url = `${CJ_API_BASE}/product/listV2?${searchParams.toString()}`
 

@@ -13,7 +13,6 @@ interface CJAuthResponse {
 }
 
 interface CJProduct {
-  id: string
   name: string
   englishName: string
   image: string
@@ -73,6 +72,11 @@ async function getAccessToken(): Promise<string> {
   return json.data.accessToken
 }
 
+function parsePrice(price: string): number {
+  const match = price.match(/[\d.]+/)
+  return match ? parseFloat(match[0]) : 0
+}
+
 export async function fetchCJProducts(params: {
   page?: number
   pageSize?: number
@@ -101,8 +105,25 @@ export async function fetchCJProducts(params: {
   const json: CJProductResponse = await res.json()
   if (!json.success) throw new Error(`CJ product list error: ${json.code}`)
 
+  const products: CJProduct[] = (json.data.list || []).map((item: any) => ({
+    pid: item.pid,
+    name: item.productName || "",
+    englishName: item.productNameEn || "",
+    image: item.productImage || "",
+    images: item.productImage ? [item.productImage] : [],
+    variantId: item.productSku || "",
+    sellPrice: parsePrice(item.sellPrice || "0"),
+    stock: parseInt(item.listingCount) || 0,
+    categoryName: item.categoryName || "",
+    weight: parseFloat(item.productWeight) || 0,
+    length: 0,
+    width: 0,
+    height: 0,
+    description: item.remark || "",
+  }))
+
   return {
-    products: json.data.list,
+    products,
     total: json.data.total,
   }
 }

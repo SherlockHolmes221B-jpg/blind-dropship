@@ -42,6 +42,12 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
             {state?.message && <p className="text-sm text-red-500">{state.message}</p>}
             <div className="flex gap-3 pt-2">
               <Button type="submit" loading={pending}>Save Changes</Button>
+              <Button type="button" variant="secondary" onClick={() => {
+                const a = document.createElement("a")
+                a.href = `/api/products/${id}/ebay-csv`
+                a.download = ""
+                a.click()
+              }}>Download eBay CSV</Button>
               <Button type="button" variant="secondary" onClick={() => router.push("/products")}>Cancel</Button>
               <Button type="button" variant="danger" onClick={async () => {
                 await deleteProduct(parseInt(id))

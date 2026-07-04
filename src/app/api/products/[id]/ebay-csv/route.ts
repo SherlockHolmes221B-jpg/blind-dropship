@@ -9,13 +9,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const product = await prisma.product.findUnique({ where: { id: parseInt(id) } })
   if (!product) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  const price = product.price.toFixed(2)
-  const description = (product.description || "").replace(/"/g, '""')
-  const images = (product.image || "").split(",").filter(Boolean).join(";")
+  const images = (product.image || "").split(",").filter(Boolean).join("|")
+  const aspects = product.category ? `Category=${product.category}` : ""
 
   const csv = [
-    "Title,Format,StartPrice,Quantity,ConditionID,PictureURL,Description",
-    `"${product.name}",FixedPrice,${price},${product.quantity || 1},1000,"${images}","${description}"`,
+    "Custom Label (SKU),Item Photo URL,Title,Category,Aspects",
+    `"${product.sku || product.id}","${images}","${product.name}","${product.category || ""}","${aspects}"`,
   ].join("\n")
 
   return new NextResponse(csv, {

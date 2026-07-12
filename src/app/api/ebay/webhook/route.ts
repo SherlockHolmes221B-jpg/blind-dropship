@@ -132,8 +132,9 @@ export async function POST(req: Request) {
       fulfilled: !!cjResult,
     })
   } catch (e) {
-    console.error("eBay webhook error:", e)
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+    const msg = e instanceof Error ? e.message : "Unknown error"
+    console.error("eBay webhook error:", msg, e instanceof Error ? e.stack : "")
+    return NextResponse.json({ error: `Webhook error: ${msg}` }, { status: 400 })
   }
 }
 

@@ -338,20 +338,11 @@ export async function fetchCJProducts(params: {
 } = {}): Promise<{ products: CJProduct[]; total: number }> {
   const keyword = params.searchName?.trim()
 
-  // Use V2 for keyword search (properly supports keyword search + returns stock)
   if (keyword) {
-    try {
-      const result = await fetchV2Products({
-        keyword,
-        size: Math.min(params.pageSize || 100, 100),
-        minStock: 1,
-      })
-      if (result.products.length > 0) return result
-    } catch {
-      // fallback below
-    }
+    const seenPids = new Set<string>()
+    const allProducts: CJProduct[] = []
 
-    // If V2 fails or returns nothing, try V1 with productNameEn
+    // Try V1 with productNameEn first (fuzzy English name match - most relevant)
     try {
       const token = await getAccessToken()
       const url = `${CJ_API_BASE}/product/list?page=${params.page || 1}&pageSize=${Math.min(params.pageSize || 200, 200)}&productNameEn=${encodeURIComponent(keyword)}`
@@ -361,17 +352,38 @@ export async function fetchCJProducts(params: {
       if (res.ok) {
         const json: CJResponse = await res.json()
         if (json.success) {
-          const raw = json.data?.list || []
-          if (raw.length > 0) {
-            return {
-              products: raw.map(mapLegacyProduct),
-              total: raw.length,
+          for (const item of (json.data?.list || [])) {
+            const pid = item.pid
+            if (!seenPids.has(pid)) {
+              seenPids.add(pid)
+              allProducts.push(mapLegacyProduct(item))
             }
           }
         }
       }
     } catch {
-      // final fallback below
+      // continue
+    }
+
+    // Also try V2 for stock data + broader keyword search
+    try {
+      const result = await fetchV2Products({
+        keyword,
+        size: Math.min(params.pageSize || 100, 100),
+        minStock: 1,
+      })
+      for (const p of result.products) {
+        if (!seenPids.has(p.pid)) {
+          seenPids.add(p.pid)
+          allProducts.push(p)
+        }
+      }
+    } catch {
+      // continue
+    }
+
+    if (allProducts.length > 0) {
+      return { products: allProducts, total: allProducts.length }
     }
 
     // Final fallback: fetch all and filter locally

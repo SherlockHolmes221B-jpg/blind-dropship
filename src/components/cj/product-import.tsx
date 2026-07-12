@@ -46,14 +46,16 @@ export function CJProductImport() {
 
   const uniqueCategories = [...new Set(products.map((p) => p.categoryName).filter(Boolean))]
 
-  const fetchProducts = useCallback(async (searchTerm?: string) => {
+  const fetchProducts = useCallback(async (searchTerm?: string, asCategory?: boolean) => {
     setLoading(true)
     setError("")
     setMessage("")
     setCategoryFilter(null)
     try {
       const params = new URLSearchParams({ pageSize: "200" })
-      if (searchTerm) params.set("searchName", searchTerm)
+      if (searchTerm) {
+        params.set(asCategory ? "categoryName" : "searchName", searchTerm)
+      }
 
       const res = await fetch(`/api/cj/products?${params.toString()}`)
       if (!res.ok) {
@@ -75,7 +77,7 @@ export function CJProductImport() {
   useEffect(() => {
     if (!hasLoaded) {
       setHasLoaded(true)
-      fetchProducts("phone case")
+      fetchProducts("phone case", true)
       setActiveCategory("phone case")
     }
   }, [hasLoaded, fetchProducts])
@@ -83,13 +85,13 @@ export function CJProductImport() {
   function handleSearch() {
     if (!search.trim()) return
     setActiveCategory(null)
-    fetchProducts(search.trim())
+    fetchProducts(search.trim(), false)
   }
 
   function handleCategoryClick(keyword: string) {
     setSearch(keyword)
     setActiveCategory(keyword)
-    fetchProducts(keyword)
+    fetchProducts(keyword, true)
   }
 
   async function handleImport(product: CJProduct) {

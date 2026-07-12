@@ -330,6 +330,34 @@ function mapLegacyProduct(item: CJRawProduct): CJProduct {
   }
 }
 
+async function searchWithWords(
+  words: string[],
+  size: number
+): Promise<CJProduct[]> {
+  const seenPids = new Set<string>()
+  const all: CJProduct[] = []
+
+  for (const word of words) {
+    if (all.length >= size) break
+    try {
+      const result = await fetchV2Products({
+        keyword: word,
+        size: Math.min(size, 100),
+      })
+      for (const p of result.products) {
+        if (!seenPids.has(p.pid)) {
+          seenPids.add(p.pid)
+          all.push(p)
+        }
+      }
+    } catch {
+      // continue to next word
+    }
+  }
+
+  return all
+}
+
 export async function fetchCJProducts(params: {
   page?: number
   pageSize?: number
@@ -339,47 +367,36 @@ export async function fetchCJProducts(params: {
   const keyword = params.searchName?.trim()
 
   if (keyword) {
-    const seenPids = new Set<string>()
-    const allProducts: CJProduct[] = []
+    const size = Math.min(params.pageSize || 100, 100)
 
-    // Try V1 with productNameEn first (fuzzy English name match - most relevant)
+    // Try full phrase as keyword first via V2
+    let allProducts: CJProduct[] = []
     try {
-      const token = await getAccessToken()
-      const url = `${CJ_API_BASE}/product/list?page=${params.page || 1}&pageSize=${Math.min(params.pageSize || 200, 200)}&productNameEn=${encodeURIComponent(keyword)}`
-      const res = await rateLimitedCjFetch(url, {
-        headers: { "CJ-Access-Token": token },
-      })
-      if (res.ok) {
-        const json: CJResponse = await res.json()
-        if (json.success) {
-          for (const item of (json.data?.list || [])) {
-            const pid = item.pid
-            if (!seenPids.has(pid)) {
-              seenPids.add(pid)
-              allProducts.push(mapLegacyProduct(item))
-            }
-          }
-        }
-      }
+      const result = await fetchV2Products({ keyword, size })
+      allProducts = result.products
     } catch {
       // continue
     }
 
-    // Also try V2 for stock data + broader keyword search
-    try {
-      const result = await fetchV2Products({
-        keyword,
-        size: Math.min(params.pageSize || 100, 100),
-        minStock: 1,
-      })
-      for (const p of result.products) {
-        if (!seenPids.has(p.pid)) {
-          seenPids.add(p.pid)
-          allProducts.push(p)
+    // If few results, also search individual words and merge
+    if (allProducts.length < size) {
+      const words = keyword
+        .split(/\s+/)
+        .filter((w) => w.length > 1 && w.toLowerCase() !== "and")
+      if (words.length > 1) {
+        const seen = new Set(allProducts.map((p) => p.pid))
+        try {
+          const wordResults = await searchWithWords(words, size - allProducts.length)
+          for (const p of wordResults) {
+            if (!seen.has(p.pid)) {
+              seen.add(p.pid)
+              allProducts.push(p)
+            }
+          }
+        } catch {
+          // continue
         }
       }
-    } catch {
-      // continue
     }
 
     if (allProducts.length > 0) {
@@ -400,9 +417,13 @@ export async function fetchCJProducts(params: {
   // If a category name is specified, find its ID from cache and fetch via V2
   if (params.categoryName) {
     const categories = await buildCategoryCache()
-    const cat = params.categoryName.trim().toLowerCase()
+    const catWords = params.categoryName.trim().toLowerCase().split(/\s+/)
+
     for (const [id, name] of categories) {
-      if (name.toLowerCase() === cat || name.toLowerCase().includes(cat)) {
+      const nameLow = name.toLowerCase()
+      // Match if all words in the query appear in the category name
+      const allMatch = catWords.every((w) => nameLow.includes(w))
+      if (allMatch && nameLow !== "other") {
         try {
           const result = await fetchV2Products({
             categoryId: id,

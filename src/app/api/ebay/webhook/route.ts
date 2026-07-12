@@ -65,15 +65,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: "Order already exists", orderId: existingOrder.id })
     }
 
+    const quantity = parseInt(String(body.quantity)) || 1
+    const totalPrice = parseFloat(String(body.totalPrice)) || product.price
+
     const order = await prisma.order.create({
       data: {
         orderNumber: `EBAY-${body.ebayOrderId}`,
         ebayOrderId: body.ebayOrderId,
         customerId: customer.id,
         productId: product.id,
-        quantity: body.quantity || 1,
-        totalPrice: body.totalPrice || product.price,
-        cost: (product.cost || 0) * (body.quantity || 1),
+        quantity,
+        totalPrice,
+        cost: (product.cost || 0) * quantity,
         status: "pending",
       },
     })
@@ -96,7 +99,7 @@ export async function POST(req: Request) {
         cjResult = await submitCJOrder({
           productId: product.sku,
           variantId,
-          quantity: body.quantity || 1,
+          quantity,
           shippingAddress: {
             name: customer.name,
             phone: customer.phone || "0000000000",

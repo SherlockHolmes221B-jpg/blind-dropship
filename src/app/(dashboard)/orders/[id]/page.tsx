@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { statusBadge } from "@/components/ui/badge"
 import { AssignSupplierForm } from "./assign-form"
 import { MarkShippedForm } from "./ship-form"
+import { CJSubmitForm } from "./cj-submit-form"
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await verifySession()
@@ -93,7 +94,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </div>
 
           {order.status === "pending" && (
-            <AssignSupplierForm orderId={order.id} suppliers={suppliers} />
+            <>
+              {order.product.sku && <CJSubmitForm orderId={order.id} />}
+              <AssignSupplierForm orderId={order.id} suppliers={suppliers} />
+            </>
           )}
 
           {order.status === "processing" && (

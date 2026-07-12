@@ -330,28 +330,37 @@ function mapLegacyProduct(item: CJRawProduct): CJProduct {
   }
 }
 
-async function searchWithWords(
-  words: string[],
-  size: number
+async function fetchV2Pages(
+  params: {
+    keyword?: string
+    categoryId?: string
+    productFlag?: number
+    orderBy?: number
+    features?: string[]
+  },
+  maxPages: number = 3
 ): Promise<CJProduct[]> {
   const seenPids = new Set<string>()
   const all: CJProduct[] = []
 
-  for (const word of words) {
-    if (all.length >= size) break
+  for (let page = 1; page <= maxPages; page++) {
     try {
       const result = await fetchV2Products({
-        keyword: word,
-        size: Math.min(size, 100),
+        ...params,
+        page,
+        size: 100,
       })
+      let added = 0
       for (const p of result.products) {
         if (!seenPids.has(p.pid)) {
           seenPids.add(p.pid)
           all.push(p)
+          added++
         }
       }
+      if (added === 0) break
     } catch {
-      // continue to next word
+      break
     }
   }
 
@@ -367,34 +376,33 @@ export async function fetchCJProducts(params: {
   const keyword = params.searchName?.trim()
 
   if (keyword) {
-    const size = Math.min(params.pageSize || 100, 100)
+    const size = Math.min(params.pageSize || 200, 200)
+    const allProducts: CJProduct[] = []
 
-    // Try full phrase as keyword first via V2
-    let allProducts: CJProduct[] = []
-    try {
-      const result = await fetchV2Products({ keyword, size })
-      allProducts = result.products
-    } catch {
-      // continue
-    }
+    // Fetch 3 pages for the full phrase
+    const phraseResults = await fetchV2Pages({ keyword })
+    allProducts.push(...phraseResults)
 
-    // If few results, also search individual words and merge
+    // Also search individual words and merge
     if (allProducts.length < size) {
       const words = keyword
         .split(/\s+/)
         .filter((w) => w.length > 1 && w.toLowerCase() !== "and")
       if (words.length > 1) {
         const seen = new Set(allProducts.map((p) => p.pid))
-        try {
-          const wordResults = await searchWithWords(words, size - allProducts.length)
-          for (const p of wordResults) {
-            if (!seen.has(p.pid)) {
-              seen.add(p.pid)
-              allProducts.push(p)
+        for (const word of words) {
+          if (allProducts.length >= size) break
+          try {
+            const wordResults = await fetchV2Pages({ keyword: word }, 2)
+            for (const p of wordResults) {
+              if (!seen.has(p.pid) && allProducts.length < size) {
+                seen.add(p.pid)
+                allProducts.push(p)
+              }
             }
+          } catch {
+            continue
           }
-        } catch {
-          // continue
         }
       }
     }

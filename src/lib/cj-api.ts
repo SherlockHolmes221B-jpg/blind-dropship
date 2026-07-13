@@ -487,6 +487,25 @@ async function legacyFetchCategoryPage(categoryId: string, pageSize: number): Pr
   return { products: (json.data?.list || []).map(mapLegacyProduct) }
 }
 
+async function getDefaultLogistics(): Promise<string> {
+  try {
+    const token = await getAccessToken()
+    const res = await rateLimitedCjFetch(
+      `${CJ_API_BASE}/logistic/freightCalculateTip?page=1&pageSize=10`,
+      { headers: { "CJ-Access-Token": token } }
+    )
+    if (res.ok) {
+      const json = await res.json()
+      if (json.success && json.data?.list?.length > 0) {
+        return json.data.list[0].logisticName || "ePacket"
+      }
+    }
+  } catch {
+    // fallback below
+  }
+  return "ePacket"
+}
+
 export async function submitCJOrder(params: {
   productId: string
   variantId: string
@@ -494,16 +513,41 @@ export async function submitCJOrder(params: {
   shippingAddress: { name: string; phone: string; country: string; state: string; city: string; address: string; zip: string }
 }) {
   const token = await getAccessToken()
+  const logisticName = await getDefaultLogistics()
 
-  const res = await rateLimitedCjFetch(`${CJ_API_BASE}/order/create`, {
+  const url = `${CJ_API_BASE}/shopping/order/createOrderV2`
+
+  const body = {
+    orderNumber: `API-${Date.now()}`,
+    shippingZip: params.shippingAddress.zip,
+    shippingCountry: params.shippingAddress.country,
+    shippingCountryCode: params.shippingAddress.country,
+    shippingProvince: params.shippingAddress.state,
+    shippingCity: params.shippingAddress.city,
+    shippingCounty: "",
+    shippingPhone: params.shippingAddress.phone,
+    shippingCustomerName: params.shippingAddress.name,
+    shippingAddress: params.shippingAddress.address,
+    shippingAddress2: "",
+    fromCountryCode: "CN",
+    logisticName,
+    payType: 2,
+    shopLogisticsType: 2,
+    orderFlow: 1,
+    platform: "Api",
+    products: [
+      {
+        sku: params.variantId,
+        quantity: params.quantity,
+        storeLineItemId: `line-${params.productId}-${Date.now()}`,
+      },
+    ],
+  }
+
+  const res = await rateLimitedCjFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", "CJ-Access-Token": token },
-    body: JSON.stringify({
-      productId: params.productId,
-      variantId: params.variantId,
-      quantity: params.quantity,
-      shippingAddress: params.shippingAddress,
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {
@@ -512,7 +556,7 @@ export async function submitCJOrder(params: {
   }
 
   const json = await res.json()
-  if (!json.success) throw new Error(`CJ order create error: ${json.code}`)
+  if (json.success === false || json.result === false) throw new Error(`CJ order create error: ${json.code}`)
   return json.data
 }
 

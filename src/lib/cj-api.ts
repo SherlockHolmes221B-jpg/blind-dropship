@@ -506,9 +506,40 @@ async function getDefaultLogistics(): Promise<string> {
   return "ePacket"
 }
 
+export interface CJVariant {
+  vid: string
+  pid: string
+  variantName: string | null
+  variantNameEn: string | null
+  variantImage: string | null
+  variantSku: string
+  variantKey: string | null
+  variantSellPrice: number
+  variantWeight: number
+  variantLength: number
+  variantWidth: number
+  variantHeight: number
+}
+
+export async function queryProductVariants(pid: string): Promise<CJVariant[]> {
+  const token = await getAccessToken()
+
+  const res = await rateLimitedCjFetch(`${CJ_API_BASE}/product/variant/query?pid=${encodeURIComponent(pid)}`, {
+    headers: { "CJ-Access-Token": token },
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`CJ variant query failed: ${res.status} ${text}`)
+  }
+
+  const json = await res.json()
+  if (!json.success) throw new Error(`CJ variant query error: ${json.code}`)
+  return json.data || []
+}
+
 export async function submitCJOrder(params: {
-  productId: string
-  variantId: string
+  variantVid: string
   quantity: number
   shippingAddress: { name: string; phone: string; country: string; state: string; city: string; address: string; zip: string }
 }) {
@@ -537,10 +568,9 @@ export async function submitCJOrder(params: {
     platform: "Api",
       products: [
         {
-          vid: params.productId,
-          sku: params.variantId,
+          vid: params.variantVid,
           quantity: params.quantity,
-          storeLineItemId: `line-${params.productId}-${Date.now()}`,
+          storeLineItemId: `line-${params.variantVid}-${Date.now()}`,
         },
       ],
   }
@@ -566,6 +596,31 @@ export async function submitCJOrder(params: {
 export async function getCJCategories(): Promise<string[]> {
   const categories = await buildCategoryCache()
   return Array.from(categories.values())
+}
+
+export async function addProductToMyProducts(productId: string): Promise<boolean> {
+  const token = await getAccessToken()
+
+  const res = await rateLimitedCjFetch(`${CJ_API_BASE}/product/addToMyProduct`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "CJ-Access-Token": token },
+    body: JSON.stringify({ productId }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    console.error(`addToMyProduct HTTP error: ${res.status} ${text}`)
+    return false
+  }
+
+  const json = await res.json()
+  if (json.code === 200) return true
+  if (json.code === 1600000) {
+    // "The product has been added to My Products" — already added, treat as success
+    return true
+  }
+  console.error(`addToMyProduct API error: ${json.code} - ${json.message}`)
+  return false
 }
 
 export async function lookupCJVariantId(pid: string): Promise<string | null> {

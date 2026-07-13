@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { verifySession, getSession } from "@/lib/dal"
 import { revalidatePath } from "next/cache"
-import { submitCJOrder, lookupCJVariantId } from "@/lib/cj-api"
+import { submitCJOrder, lookupCJVariantId, addProductToMyProducts, queryProductVariants } from "@/lib/cj-api"
 
 export async function assignSupplier(orderId: number, supplierId: number) {
   const session = await verifySession()
@@ -92,21 +92,34 @@ export async function submitToCJ(
     if (order.status !== "pending") return { success: false, error: "Order must be pending" }
     if (!order.product.sku) return { success: false, error: "Product has no CJ SKU" }
 
-    let variantId = order.product.cjVariantId
-    if (!variantId) {
-      const lookedUp = await lookupCJVariantId(order.product.sku)
-      if (!lookedUp) return { success: false, error: "Could not find CJ variant ID for this product" }
-      variantId = lookedUp
-      await prisma.product.update({
-        where: { id: order.product.id },
-        data: { cjVariantId: lookedUp },
-      })
+    // Ensure product is in CJ "My Products" before ordering
+    try {
+      await addProductToMyProducts(order.product.sku)
+    } catch {
+      // non-blocking
     }
+
+    // Find variant vid — try stored vid first, then query API
+    let variantVid = order.product.cjVariantVid
+    if (!variantVid && order.product.sku) {
+      try {
+        const variants = await queryProductVariants(order.product.sku)
+        if (variants.length > 0) {
+          variantVid = variants[0].vid
+          await prisma.product.update({
+            where: { id: order.product.id },
+            data: { cjVariantVid: variantVid },
+          })
+        }
+      } catch {
+        // fallback
+      }
+    }
+    if (!variantVid) return { success: false, error: "Could not find CJ variant for this product" }
 
     const parts = shipping ? null : order.customer.address?.split(", ") || []
     const result = await submitCJOrder({
-      productId: order.product.sku,
-      variantId,
+      variantVid,
       quantity: order.quantity,
       shippingAddress: {
         name: order.customer.name,

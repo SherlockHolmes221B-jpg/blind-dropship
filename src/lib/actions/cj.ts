@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma"
 import { verifySession } from "@/lib/dal"
+import { addProductToMyProducts, queryProductVariants } from "@/lib/cj-api"
 import { revalidatePath } from "next/cache"
 
 export async function importCJProduct(formData: FormData) {
@@ -25,7 +26,7 @@ export async function importCJProduct(formData: FormData) {
     return { error: `Product ${pid} already exists as "${existing.name}"` }
   }
 
-  await prisma.product.create({
+  const product = await prisma.product.create({
     data: {
       name,
       sku: pid,
@@ -39,8 +40,27 @@ export async function importCJProduct(formData: FormData) {
     },
   })
 
+  try {
+    await addProductToMyProducts(pid)
+  } catch (e) {
+    console.error(`addToMyProduct failed for ${pid}:`, e)
+  }
+
+  // Fetch variant data and store the first variant's vid
+  try {
+    const variants = await queryProductVariants(pid)
+    if (variants.length > 0) {
+      await prisma.product.update({
+        where: { id: product.id },
+        data: { cjVariantVid: variants[0].vid },
+      })
+    }
+  } catch (e) {
+    console.error(`Variant query failed for ${pid}:`, e)
+  }
+
   revalidatePath("/cj-products")
-  return { success: true }
+  return { success: true, id: product.id }
 }
 
 export async function syncCJProducts(products: {
@@ -65,7 +85,7 @@ export async function syncCJProducts(products: {
       continue
     }
 
-    await prisma.product.create({
+    const created = await prisma.product.create({
       data: {
         name: p.name,
         sku: p.pid,
@@ -78,6 +98,25 @@ export async function syncCJProducts(products: {
       },
     })
     imported++
+
+    try {
+      await addProductToMyProducts(p.pid)
+    } catch {
+      // non-blocking
+    }
+
+    // Fetch variant data and store the first variant's vid
+    try {
+      const variants = await queryProductVariants(p.pid)
+      if (variants.length > 0) {
+        await prisma.product.update({
+          where: { id: created.id },
+          data: { cjVariantVid: variants[0].vid },
+        })
+      }
+    } catch {
+      // non-blocking
+    }
   }
 
   revalidatePath("/cj-products")

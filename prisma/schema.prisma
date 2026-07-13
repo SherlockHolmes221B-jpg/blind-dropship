@@ -32,6 +32,7 @@ model Product {
   ebayItemId    String   @default("")
   ebayListingId String   @default("")
   cjVariantId   String   @default("")
+  cjVariantVid  String   @default("")
   image         String   @default("")
   category      String   @default("")
   quantity      Int      @default(0)

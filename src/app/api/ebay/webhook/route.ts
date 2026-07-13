@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { submitCJOrder, lookupCJVariantId } from "@/lib/cj-api"
+import { submitCJOrder, lookupCJVariantId, addProductToMyProducts, queryProductVariants } from "@/lib/cj-api"
 
 interface ZapierPayload {
   ebayOrderId: string
@@ -86,25 +86,33 @@ export async function POST(req: Request) {
         status: "pending",
       },
     })
-
-    // Auto-fulfill via CJ if product has CJ IDs
+    // Auto-fulfill via CJ if product has a CJ SKU
     let cjResult: { orderId?: string; trackingNumber?: string } | null = null
-    let variantId = product.cjVariantId
-    if (product.sku && !variantId) {
-      const lookedUp = await lookupCJVariantId(product.sku)
-      if (lookedUp) {
-        variantId = lookedUp
-        await prisma.product.update({
-          where: { id: product.id },
-          data: { cjVariantId: lookedUp },
-        })
+    let variantVid = product.cjVariantVid
+    if (product.sku && !variantVid) {
+      try {
+        const variants = await queryProductVariants(product.sku)
+        if (variants.length > 0) {
+          variantVid = variants[0].vid
+          await prisma.product.update({
+            where: { id: product.id },
+            data: { cjVariantVid: variantVid },
+          })
+        }
+      } catch {
+        // lookup failed, skip auto-fulfill
       }
     }
-    if (product.sku && variantId) {
+
+    // Ensure product is in CJ "My Products" before ordering
+    if (product.sku) {
+      try { await addProductToMyProducts(product.sku) } catch {}
+    }
+
+    if (product.sku && variantVid) {
       try {
         cjResult = await submitCJOrder({
-          productId: product.sku,
-          variantId,
+          variantVid,
           quantity,
           shippingAddress: {
             name: customer.name,

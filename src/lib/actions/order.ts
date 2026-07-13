@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { verifySession, getSession } from "@/lib/dal"
 import { revalidatePath } from "next/cache"
+import { submitCJOrder, lookupCJVariantId } from "@/lib/cj-api"
 
 export async function assignSupplier(orderId: number, supplierId: number) {
   const session = await verifySession()
@@ -89,7 +90,6 @@ export async function submitToCJ(orderId: number) {
 
   let variantId = order.product.cjVariantId
   if (!variantId) {
-    const { lookupCJVariantId } = await import("@/lib/cj-api")
     const lookedUp = await lookupCJVariantId(order.product.sku)
     if (!lookedUp) throw new Error("Could not find CJ variant ID for this product")
     variantId = lookedUp
@@ -99,7 +99,7 @@ export async function submitToCJ(orderId: number) {
     })
   }
 
-  const { submitCJOrder } = await import("@/lib/cj-api")
+  const addr = order.customer.address?.split(", ") || []
   const result = await submitCJOrder({
     productId: order.product.sku,
     variantId,
@@ -107,11 +107,11 @@ export async function submitToCJ(orderId: number) {
     shippingAddress: {
       name: order.customer.name,
       phone: order.customer.phone || "0000000000",
-      country: "US",
-      state: "",
-      city: "",
-      address: order.customer.address || "",
-      zip: "",
+      country: addr[4] || "US",
+      state: addr[3] || "",
+      city: addr[2] || "",
+      address: addr[0] || order.customer.address || "",
+      zip: addr[3] || "",
     },
   })
 

@@ -20,8 +20,9 @@ export function CJSubmitForm({ orderId }: { orderId: number }) {
       setSuccess(true)
       setMessage(`Shipped! Tracking: ${result.trackingNumber || "Pending from CJ"}`)
     } catch (err) {
+      const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "Failed to submit to CJ"
       setSuccess(false)
-      setMessage(err instanceof Error ? err.message : "Failed to submit to CJ")
+      setMessage(msg)
     } finally {
       setPending(false)
     }

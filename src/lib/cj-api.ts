@@ -556,7 +556,9 @@ export async function submitCJOrder(params: {
   }
 
   const json = await res.json()
-  if (json.success === false || json.result === false) throw new Error(`CJ order create error: ${json.code}`)
+  if (json.success === false || json.result === false) {
+    throw new Error(`CJ order create error: ${json.code} - ${json.message || ""}`)
+  }
   return json.data
 }
 

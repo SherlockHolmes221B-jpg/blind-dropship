@@ -77,7 +77,10 @@ export async function markDelivered(orderId: number) {
   revalidatePath("/orders")
 }
 
-export async function submitToCJ(orderId: number): Promise<{ success: boolean; trackingNumber?: string; error?: string }> {
+export async function submitToCJ(
+  orderId: number,
+  shipping?: { address: string; city: string; state: string; zip: string; country?: string; phone: string }
+): Promise<{ success: boolean; trackingNumber?: string; error?: string }> {
   try {
     await verifySession()
 
@@ -100,19 +103,19 @@ export async function submitToCJ(orderId: number): Promise<{ success: boolean; t
       })
     }
 
-    const addr = order.customer.address?.split(", ") || []
+    const parts = shipping ? null : order.customer.address?.split(", ") || []
     const result = await submitCJOrder({
       productId: order.product.sku,
       variantId,
       quantity: order.quantity,
       shippingAddress: {
         name: order.customer.name,
-        phone: order.customer.phone || "0000000000",
-        country: addr[4] || "US",
-        state: addr[3] || "",
-        city: addr[2] || "",
-        address: addr[0] || order.customer.address || "",
-        zip: addr[3] || "",
+        phone: shipping?.phone || order.customer.phone || "0000000000",
+        country: shipping?.country || "US",
+        state: shipping?.state || parts?.[2] || "",
+        city: shipping?.city || parts?.[1] || "",
+        address: shipping?.address || parts?.[0] || order.customer.address || "",
+        zip: shipping?.zip || parts?.[3] || "",
       },
     })
 

@@ -535,13 +535,14 @@ export async function submitCJOrder(params: {
     shopLogisticsType: 2,
     orderFlow: 1,
     platform: "Api",
-    products: [
-      {
-        sku: params.variantId,
-        quantity: params.quantity,
-        storeLineItemId: `line-${params.productId}-${Date.now()}`,
-      },
-    ],
+      products: [
+        {
+          vid: params.productId,
+          sku: params.variantId,
+          quantity: params.quantity,
+          storeLineItemId: `line-${params.productId}-${Date.now()}`,
+        },
+      ],
   }
 
   const res = await rateLimitedCjFetch(url, {

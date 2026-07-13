@@ -46,15 +46,21 @@ export async function POST(req: Request) {
       where: { ebayCustomerId: body.ebayOrderId },
     })
 
-    if (!customer) {
+    const customerData = {
+      name: body.customerName,
+      email: body.customerEmail || "",
+      phone: body.customerPhone || "",
+      address: [body.shippingAddress, body.shippingCity, body.shippingState, body.shippingZip, body.shippingCountry].filter(Boolean).join(", "),
+    }
+
+    if (customer) {
+      customer = await prisma.customer.update({
+        where: { id: customer.id },
+        data: customerData,
+      })
+    } else {
       customer = await prisma.customer.create({
-        data: {
-          name: body.customerName,
-          email: body.customerEmail || "",
-          phone: body.customerPhone || "",
-          address: [body.shippingAddress, body.shippingCity, body.shippingState, body.shippingZip, body.shippingCountry].filter(Boolean).join(", "),
-          ebayCustomerId: body.ebayOrderId,
-        },
+        data: { ...customerData, ebayCustomerId: body.ebayOrderId },
       })
     }
 

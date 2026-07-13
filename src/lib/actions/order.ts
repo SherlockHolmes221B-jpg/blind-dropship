@@ -77,56 +77,61 @@ export async function markDelivered(orderId: number) {
   revalidatePath("/orders")
 }
 
-export async function submitToCJ(orderId: number) {
-  await verifySession()
+export async function submitToCJ(orderId: number): Promise<{ success: boolean; trackingNumber?: string; error?: string }> {
+  try {
+    await verifySession()
 
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: { product: true, customer: true },
-  })
-  if (!order) throw new Error("Order not found")
-  if (order.status !== "pending") throw new Error("Order must be pending")
-  if (!order.product.sku) throw new Error("Product has no CJ SKU")
-
-  let variantId = order.product.cjVariantId
-  if (!variantId) {
-    const lookedUp = await lookupCJVariantId(order.product.sku)
-    if (!lookedUp) throw new Error("Could not find CJ variant ID for this product")
-    variantId = lookedUp
-    await prisma.product.update({
-      where: { id: order.product.id },
-      data: { cjVariantId: lookedUp },
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { product: true, customer: true },
     })
+    if (!order) return { success: false, error: "Order not found" }
+    if (order.status !== "pending") return { success: false, error: "Order must be pending" }
+    if (!order.product.sku) return { success: false, error: "Product has no CJ SKU" }
+
+    let variantId = order.product.cjVariantId
+    if (!variantId) {
+      const lookedUp = await lookupCJVariantId(order.product.sku)
+      if (!lookedUp) return { success: false, error: "Could not find CJ variant ID for this product" }
+      variantId = lookedUp
+      await prisma.product.update({
+        where: { id: order.product.id },
+        data: { cjVariantId: lookedUp },
+      })
+    }
+
+    const addr = order.customer.address?.split(", ") || []
+    const result = await submitCJOrder({
+      productId: order.product.sku,
+      variantId,
+      quantity: order.quantity,
+      shippingAddress: {
+        name: order.customer.name,
+        phone: order.customer.phone || "0000000000",
+        country: addr[4] || "US",
+        state: addr[3] || "",
+        city: addr[2] || "",
+        address: addr[0] || order.customer.address || "",
+        zip: addr[3] || "",
+      },
+    })
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: "shipped",
+        trackingNumber: result.trackingNumber || "",
+        shippingCarrier: "CJ Dropshipping",
+        shippedAt: new Date(),
+      },
+    })
+
+    revalidatePath("/orders")
+    return { success: true, trackingNumber: result.trackingNumber }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown CJ submission error"
+    return { success: false, error: msg }
   }
-
-  const addr = order.customer.address?.split(", ") || []
-  const result = await submitCJOrder({
-    productId: order.product.sku,
-    variantId,
-    quantity: order.quantity,
-    shippingAddress: {
-      name: order.customer.name,
-      phone: order.customer.phone || "0000000000",
-      country: addr[4] || "US",
-      state: addr[3] || "",
-      city: addr[2] || "",
-      address: addr[0] || order.customer.address || "",
-      zip: addr[3] || "",
-    },
-  })
-
-  await prisma.order.update({
-    where: { id: order.id },
-    data: {
-      status: "shipped",
-      trackingNumber: result.trackingNumber || "",
-      shippingCarrier: "CJ Dropshipping",
-      shippedAt: new Date(),
-    },
-  })
-
-  revalidatePath("/orders")
-  return { success: true, trackingNumber: result.trackingNumber }
 }
 
 export async function createManualOrder(prevState: unknown, formData: FormData) {

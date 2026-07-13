@@ -17,8 +17,13 @@ export function CJSubmitForm({ orderId }: { orderId: number }) {
     setSuccess(false)
     try {
       const result = await submitToCJ(orderId)
-      setSuccess(true)
-      setMessage(`Shipped! Tracking: ${result.trackingNumber || "Pending from CJ"}`)
+      if (result.success) {
+        setSuccess(true)
+        setMessage(`Shipped! Tracking: ${result.trackingNumber || "Pending from CJ"}`)
+      } else {
+        setSuccess(false)
+        setMessage(result.error || "Failed to submit to CJ")
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "Failed to submit to CJ"
       setSuccess(false)

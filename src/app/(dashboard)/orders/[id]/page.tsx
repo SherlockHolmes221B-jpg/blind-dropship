@@ -6,6 +6,7 @@ import { statusBadge } from "@/components/ui/badge"
 import { AssignSupplierForm } from "./assign-form"
 import { MarkShippedForm } from "./ship-form"
 import { CJSubmitForm } from "./cj-submit-form"
+import { RefreshTrackingButton } from "./refresh-tracking"
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await verifySession()
@@ -102,6 +103,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
           {order.status === "processing" && (
             <MarkShippedForm orderId={order.id} />
+          )}
+
+          {order.status === "shipped" && !order.trackingNumber && (
+            <RefreshTrackingButton orderId={order.id} hasCjOrderId={!!order.cjOrderId} />
           )}
         </CardContent>
       </Card>

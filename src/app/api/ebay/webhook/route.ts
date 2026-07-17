@@ -132,6 +132,7 @@ export async function POST(req: Request) {
               status: "shipped",
               trackingNumber: cjResult.trackingNumber || "",
               shippingCarrier: "CJ Dropshipping",
+              cjOrderId: cjResult.orderId || "",
               shippedAt: new Date(),
             },
           })

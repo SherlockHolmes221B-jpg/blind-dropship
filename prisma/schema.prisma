@@ -96,6 +96,7 @@ model Order {
   profit          Float     @default(0)
   trackingNumber  String    @default("")
   shippingCarrier String    @default("")
+  cjOrderId       String    @default("")
   notes           String    @default("")
   orderedAt       DateTime  @default(now())
   shippedAt       DateTime?

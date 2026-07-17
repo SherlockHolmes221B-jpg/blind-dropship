@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma"
 import { verifySession, getSession } from "@/lib/dal"
 import { revalidatePath } from "next/cache"
-import { submitCJOrder, lookupCJVariantId, addProductToMyProducts, queryProductVariants } from "@/lib/cj-api"
+import { submitCJOrder, lookupCJVariantId, addProductToMyProducts, queryProductVariants, syncCJOrderTracking } from "@/lib/cj-api"
 
 export async function assignSupplier(orderId: number, supplierId: number) {
   const session = await verifySession()
@@ -138,6 +138,7 @@ export async function submitToCJ(
         status: "shipped",
         trackingNumber: result.trackingNumber || "",
         shippingCarrier: "CJ Dropshipping",
+        cjOrderId: result.orderId || "",
         shippedAt: new Date(),
       },
     })
@@ -188,4 +189,31 @@ export async function createManualOrder(prevState: unknown, formData: FormData) 
 
   revalidatePath("/orders")
   return { message: "Order created.", orderNumber }
+}
+
+export async function refreshCJTracking(orderId: number): Promise<{ trackingNumber?: string; carrier?: string; error?: string }> {
+  try {
+    await verifySession()
+
+    const order = await prisma.order.findUnique({ where: { id: orderId } })
+    if (!order) return { error: "Order not found" }
+    if (!order.cjOrderId) return { error: "No CJ order ID saved" }
+
+    const result = await syncCJOrderTracking(order.cjOrderId)
+    if (!result || !result.trackNumber) return { error: "Tracking not available yet" }
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        trackingNumber: result.trackNumber,
+        shippingCarrier: result.trackingProvider || order.shippingCarrier,
+      },
+    })
+
+    revalidatePath("/orders")
+    revalidatePath(`/orders/${orderId}`)
+    return { trackingNumber: result.trackNumber, carrier: result.trackingProvider }
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Unknown error" }
+  }
 }

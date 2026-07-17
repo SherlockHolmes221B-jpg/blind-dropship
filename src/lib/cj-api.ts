@@ -542,7 +542,7 @@ export async function submitCJOrder(params: {
   variantVid: string
   quantity: number
   shippingAddress: { name: string; phone: string; country: string; state: string; city: string; address: string; zip: string }
-}) {
+}): Promise<{ orderId?: string; trackingNumber?: string }> {
   const token = await getAccessToken()
   const logisticName = await getDefaultLogistics()
 
@@ -590,7 +590,7 @@ export async function submitCJOrder(params: {
   if (json.success === false || json.result === false) {
     throw new Error(`CJ order create error: ${json.code} - ${json.message || ""}`)
   }
-  return json.data
+  return { orderId: json.data?.orderId, trackingNumber: json.data?.trackNumber }
 }
 
 export async function getCJCategories(): Promise<string[]> {
@@ -637,6 +637,26 @@ export async function lookupCJVariantId(pid: string): Promise<string | null> {
   if (!json.success || !json.data?.list?.length) return null
 
   return json.data.list[0].productSku || null
+}
+
+export async function syncCJOrderTracking(cjOrderId: string): Promise<{ trackNumber: string; trackingProvider: string } | null> {
+  const token = await getAccessToken()
+
+  const res = await rateLimitedCjFetch(
+    `${CJ_API_BASE}/shopping/order/list?pageNum=1&pageSize=10&orderIds=${encodeURIComponent(cjOrderId)}`,
+    { headers: { "CJ-Access-Token": token } }
+  )
+
+  if (!res.ok) return null
+
+  const json = await res.json()
+  if (!json.success || !json.data?.list?.length) return null
+
+  const order = json.data.list[0]
+  if (order.trackNumber) {
+    return { trackNumber: order.trackNumber, trackingProvider: order.trackingProvider || "" }
+  }
+  return null
 }
 
 export type { CJProduct }

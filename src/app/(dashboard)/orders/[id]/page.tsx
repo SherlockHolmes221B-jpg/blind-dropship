@@ -106,7 +106,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           )}
 
           {order.status === "shipped" && !order.trackingNumber && (
-            <RefreshTrackingButton orderId={order.id} hasCjOrderId={!!order.cjOrderId} />
+            <RefreshTrackingButton orderId={order.id} savedCjOrderId={order.cjOrderId} />
           )}
         </CardContent>
       </Card>

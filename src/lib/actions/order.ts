@@ -191,15 +191,23 @@ export async function createManualOrder(prevState: unknown, formData: FormData) 
   return { message: "Order created.", orderNumber }
 }
 
-export async function refreshCJTracking(orderId: number): Promise<{ trackingNumber?: string; carrier?: string; error?: string }> {
+export async function refreshCJTracking(orderId: number, cjOrderId: string): Promise<{ trackingNumber?: string; carrier?: string; error?: string }> {
   try {
     await verifySession()
 
     const order = await prisma.order.findUnique({ where: { id: orderId } })
     if (!order) return { error: "Order not found" }
-    if (!order.cjOrderId) return { error: "No CJ order ID saved" }
+    if (!cjOrderId) return { error: "No CJ order ID" }
 
-    const result = await syncCJOrderTracking(order.cjOrderId)
+    // Save CJ order ID if not already saved
+    if (!order.cjOrderId && cjOrderId) {
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { cjOrderId },
+      })
+    }
+
+    const result = await syncCJOrderTracking(cjOrderId)
     if (!result || !result.trackNumber) return { error: "Tracking not available yet" }
 
     await prisma.order.update({
